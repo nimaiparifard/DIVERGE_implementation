@@ -1,0 +1,65 @@
+# DIVERGE — Python dependencies (from project imports)
+#
+# Linux / Colab / RunPod: just run   bash sh_scripts/setup_env.sh
+#   (installs torch + matching PyG wheels, then this file).
+#
+# Manual install — torch first, then PyG wheels that match that torch build:
+#   https://pytorch.org/get-started/locally/
+#   https://pytorch-geometric.readthedocs.io/en/latest/install/installation.html
+#
+# Known-good combo (the Windows dev machine):  Python 3.13, torch 2.7.1+cu128
+#   pip install torch==2.7.1 --index-url https://download.pytorch.org/whl/cu128
+#   pip install torch_scatter torch_sparse -f https://data.pyg.org/whl/torch-2.7.0+cu128.html
+#   pip install -r requirements.txt
+
+# --- Core deep learning ---
+torch>=2.1.0
+torch-geometric>=2.4.0
+# common/__init__.py imports common/hetero_gnn.py, which imports torch_sparse → required.
+# Install from the PyG wheel index (see above); a plain pip install compiles from source.
+torch-sparse>=0.6.18
+
+# --- LLM fine-tuning (train_llm/, cache/) ---
+# PINNED to the versions verified on the dev machine. Colab ships newer ones that break the code:
+#   transformers 5.x removed TrainingArguments(overwrite_output_dir=...),
+#   peft >=0.18 rejects Colab's preinstalled torchao 0.10.
+# Same versions everywhere also keeps seed runs comparable across machines.
+transformers==4.55.0
+tokenizers==0.21.4
+peft==0.17.0
+accelerate==1.10.0
+bitsandbytes==0.47.0
+sentencepiece>=0.2.0
+protobuf>=4.25.0
+safetensors>=0.4.3
+huggingface_hub>=0.34.0,<1.0
+
+# --- Numerics & ML ---
+numpy>=1.26.0
+scipy>=1.11.0
+scikit-learn>=1.3.0
+pandas>=2.0.0
+
+# --- Config & utilities ---
+yacs>=0.1.8
+tqdm>=4.66.0
+pytz>=2024.1
+
+# --- Plotting & visualization ---
+matplotlib>=3.8.0
+seaborn>=0.13.0
+
+# --- Text / graph embeddings ---
+sentence-transformers>=2.6.0
+networkx>=3.2
+
+# --- Optional (install only if you use them) ---------------------------------
+# Node2Vec shallow features (common/dataloader.py, only when datasets/Node2Vec/<name>.pt
+# is missing). NOTE: gensim pins numpy<2 / old scipy and will downgrade a Colab env.
+#   pip install node2vec gensim
+# UMAP plots (visualize/*, experiments/info_embeddings.py):
+#   pip install umap-learn
+# Hypothesis testing (experiments/hypothesis_testing_fintuned_unfinetuned.py):
+#   pip install statsmodels
+# LLM text enhancement (experiments/enahnce_textual_embeddings.py):
+#   pip install pydantic langchain-core langchain-ollama langchain-openai

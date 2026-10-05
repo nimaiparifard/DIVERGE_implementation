@@ -1,0 +1,80 @@
+{
+    "seed": 43,
+    "device": 1,
+    "dataset": "cora",
+    "gnn_model_name": "GCN",
+    "llm_name": "llama_3.2_1B",
+    "epochs": 200,
+    "early_stop": 20,
+    "re_split": 1,
+    "lr": 0.01,
+    "hidden_dim": 1024,
+    "num_layers": 3,
+    "dropout": 0.0,
+    "weight_decay": 0.0,
+    "batch_norm": 1,
+    "tuning": {
+        "init_weight_approach": "eva",
+        "peft_type": "lora",
+        "embedding_cache": "artifacts\\cache\\llama_3.2_1B_cora_seqcls_lora_init-eva_pool-mean_seed43_semi_supervised.pt",
+        "trial_log": "results\\gnn_tuning\\cora_llama_3.2_1B_GCN_supervised_seed43_init-eva\\trials.jsonl",
+        "search_space": {
+            "learning_rate": [
+                0.01,
+                0.005,
+                0.001,
+                0.0001
+            ],
+            "hidden_dim": [
+                128,
+                256,
+                512,
+                1024
+            ],
+            "num_layers": [
+                2,
+                3
+            ],
+            "dropout": [
+                0.0,
+                0.1,
+                0.01,
+                0.5
+            ],
+            "weight_decay": [
+                0.0,
+                0.01
+            ],
+            "batch_norm": [
+                0,
+                1
+            ]
+        },
+        "val_acc": 90.16000000000001,
+        "val_acc_std": 0.23252240035460506,
+        "test_acc": 87.88333333333333,
+        "test_acc_std": 0.3151013946159046,
+        "val_f1": 89.11,
+        "test_f1": 86.73666666666666,
+        "val_acc_per_seed": [
+            90.41,
+            89.85,
+            90.22
+        ],
+        "test_acc_per_seed": [
+            88.01,
+            87.45,
+            88.19
+        ],
+        "eval_seeds": [
+            43,
+            1043,
+            2043
+        ],
+        "n_candidates": 512,
+        "n_promoted": 16,
+        "search": "random",
+        "total_time_sec": 757.3,
+        "timestamp": "2026-09-30 02:39:40"
+    }
+}

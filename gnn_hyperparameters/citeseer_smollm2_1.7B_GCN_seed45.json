@@ -1,0 +1,80 @@
+{
+    "seed": 45,
+    "device": 1,
+    "dataset": "citeseer",
+    "gnn_model_name": "GCN",
+    "llm_name": "smollm2_1.7B",
+    "epochs": 200,
+    "early_stop": 20,
+    "re_split": 1,
+    "lr": 0.001,
+    "hidden_dim": 128,
+    "num_layers": 2,
+    "dropout": 0.0,
+    "weight_decay": 0.0,
+    "batch_norm": 1,
+    "tuning": {
+        "init_weight_approach": "eva",
+        "peft_type": "lora",
+        "embedding_cache": "artifacts\\cache\\smollm2_1.7B_citeseer_seqcls_lora_init-eva_pool-mean_seed45_semi_supervised.pt",
+        "trial_log": "results\\gnn_tuning\\citeseer_smollm2_1.7B_GCN_supervised_seed45_init-eva\\trials.jsonl",
+        "search_space": {
+            "learning_rate": [
+                0.01,
+                0.005,
+                0.001,
+                0.0001
+            ],
+            "hidden_dim": [
+                128,
+                256,
+                512,
+                1024
+            ],
+            "num_layers": [
+                2,
+                3
+            ],
+            "dropout": [
+                0.0,
+                0.1,
+                0.01,
+                0.5
+            ],
+            "weight_decay": [
+                0.0,
+                0.01
+            ],
+            "batch_norm": [
+                0,
+                1
+            ]
+        },
+        "val_acc": 78.44,
+        "val_acc_std": 0.48524907693541125,
+        "test_acc": 78.06,
+        "test_acc_std": 0.38375339303603034,
+        "val_f1": 76.44333333333333,
+        "test_f1": 73.97,
+        "val_acc_per_seed": [
+            78.02,
+            78.18,
+            79.12
+        ],
+        "test_acc_per_seed": [
+            78.53,
+            78.06,
+            77.59
+        ],
+        "eval_seeds": [
+            45,
+            1045,
+            2045
+        ],
+        "n_candidates": 512,
+        "n_promoted": 16,
+        "search": "random",
+        "total_time_sec": 756.0,
+        "timestamp": "2026-09-30 05:43:09"
+    }
+}

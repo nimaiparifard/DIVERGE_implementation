@@ -1,0 +1,392 @@
+STATISTICAL REPORTING FOR THE IPM REVISION (R4-C5)
+McNemar test, continuity correction, multiple comparisons, ArXiv, baselines
+=====================================================================
+
+Contents
+  0. What the reviewer asks (4 separate problems)
+  1. Problem A - Eq. (36) does not match Table 9
+  2. Problem B - multiple-comparison correction
+  3. Problem C - ArXiv is missing from Table 9
+  4. Problem D - DIVERGE is never tested against the baselines
+  5. Bug found in the script (must fix before re-running)
+  6. Code changes
+  7. LaTeX to put in the paper
+  8. Other places in the paper that must change
+  9. Draft response to the reviewer
+ 10. Checklist
+
+
+---------------------------------------------------------------------
+0. WHAT THE REVIEWER ASKS
+---------------------------------------------------------------------
+
+"Correct the statistical reporting: Eq. (36) is uncorrected while Table 9's
+values are continuity-corrected, a multiple-comparison correction is needed
+(WikiCS p = 0.0181 fails Bonferroni at 0.0125), ArXiv's absence from Table 9
+needs explanation, and DIVERGE should be tested against baselines rather
+than only fine-tuned vs. base embeddings."
+
+Four independent problems. The reviewer is right on all four. The first
+three are cheap to fix. The fourth is the one that matters for acceptance:
+the paper's main claim ("DIVERGE beats the baselines") is currently not
+tested at all. The only test in the paper checks a secondary claim
+(fine-tuning the LLM helps).
+
+
+---------------------------------------------------------------------
+1. PROBLEM A - EQ. (36) DOES NOT MATCH TABLE 9
+---------------------------------------------------------------------
+
+The paper writes (template.tex, McNemar subsection):
+
+    chi^2 = (b - c)^2 / (b + c)                     <- no correction
+
+But the numbers in Table 9 were produced by statsmodels
+mcnemar(..., correction=True), i.e. Edwards' continuity-corrected form:
+
+    chi^2 = (|b - c| - 1)^2 / (b + c)
+
+I recomputed every column; the table matches the CORRECTED formula
+exactly, so the reviewer is right:
+
+  Dataset    b    c    uncorrected chi2 (p)      corrected chi2 (p)      exact binomial p
+  Cora      11   64    37.453 (9.36e-10)         36.053 (1.92e-9)  <-T9   3.11e-10
+  PubMed    40  267   167.847 (2.18e-38)        166.371 (4.59e-38) <-T9   2.37e-42
+  CiteSeer  10   38    16.333 (5.31e-5)          15.188 (9.73e-5)  <-T9   6.17e-5
+  WikiCS    70  102     5.953 (0.0147)            5.587 (0.0181)   <-T9   0.0178
+
+FIX: change the equation, do NOT change the table. The corrected version is
+the more conservative one (larger p), so the table is already the "safe"
+choice; only the formula is wrong.
+
+Also state the rule the script actually uses: when b + c < 25 the script
+switches to the exact binomial McNemar test (exact=True). None of the four
+current datasets hits that branch (smallest b + c = 48), but the rule must
+be written in the paper because it will be used for other comparisons
+(Section 4) where b + c can be small.
+
+Alternative (cleaner, recommended if you re-run anyway): use the exact
+binomial McNemar test everywhere. It needs no approximation and no
+correction choice, and it is what exp4_stability_significance.py already
+uses for the ensemble experiments, so the whole paper would use one
+definition. The p-values barely change (last column above).
+Pick ONE of the two and write it; do not mix silently.
+
+
+---------------------------------------------------------------------
+2. PROBLEM B - MULTIPLE-COMPARISON CORRECTION
+---------------------------------------------------------------------
+
+Four tests at alpha = 0.05 -> family-wise error rate up to 1-0.95^4 = 18.5%.
+The reviewer's arithmetic is correct: Bonferroni threshold 0.05/4 = 0.0125,
+WikiCS p = 0.0181 > 0.0125 -> WikiCS is NOT significant under Bonferroni
+(Bonferroni-adjusted p = 4 x 0.0181 = 0.0724).
+
+The right fix: Holm-Bonferroni (Holm 1979).
+  - It controls exactly the same family-wise error rate as Bonferroni,
+    under exactly the same (no) assumptions.
+  - It is uniformly more powerful: it never rejects less than Bonferroni.
+  - It is already the correction used in exp4_stability_significance.py
+    (holm() function), so the paper becomes consistent.
+
+Holm procedure: sort p ascending, compare the k-th smallest with
+alpha/(m-k+1), stop at the first failure.
+
+  rank  dataset   p (corrected chi2)   Holm threshold   Holm-adjusted p   reject?
+  1     PubMed    4.59e-38             0.05/4=0.0125    1.84e-37          yes
+  2     Cora      1.92e-9              0.05/3=0.0167    5.76e-9           yes
+  3     CiteSeer  9.73e-5              0.05/2=0.025     1.95e-4           yes
+  4     WikiCS    0.0181               0.05/1=0.05      0.0181            yes
+
+-> All four survive Holm. With 5 datasets (after adding ArXiv, Section 3)
+   WikiCS is still fine as long as ArXiv's p is below 0.0181 (then WikiCS is
+   compared with 0.05) or at worst compared with 0.025 (0.0181 < 0.025).
+   Benjamini-Hochberg FDR also rejects all four (WikiCS BH-adjusted p =
+   0.0181).
+
+HOW TO PRESENT IT HONESTLY (important):
+Switching from Bonferroni to Holm AFTER seeing that Bonferroni fails can
+look like method shopping to the reviewer. Defuse this explicitly:
+  (1) Report BOTH the Bonferroni-adjusted and Holm-adjusted p in Table 9.
+  (2) Say openly that WikiCS does not survive the plain Bonferroni bound,
+      that it survives Holm, which controls the same error rate, and that
+      the WikiCS effect is small (+1.37 pp, see effect sizes below).
+  (3) Justify Holm by its properties (same FWER, uniformly more powerful)
+      and by consistency with the other tests in the paper - not by the
+      fact that it makes WikiCS significant.
+  (4) Soften the WikiCS conclusion in the text ("weaker evidence").
+
+Also add EFFECT SIZES. A p-value alone says nothing about how large the
+gain is. For McNemar the natural ones are:
+  - accuracy difference (c - b)/n with a 95% CI
+  - discordant odds ratio c/b
+
+  Dataset    n      acc. diff (c-b)/n     c/b
+  Cora       542    +9.78 pp              5.82
+  PubMed     3944   +5.76 pp              6.68
+  CiteSeer   638    +4.39 pp              3.80
+  WikiCS     2341   +1.37 pp              1.46
+
+Do NOT switch to a one-sided test to halve the WikiCS p-value; H1 in the
+paper is two-sided and changing it after the fact is exactly what the
+reviewer is watching for.
+
+
+---------------------------------------------------------------------
+3. PROBLEM C - ARXIV IS MISSING FROM TABLE 9
+---------------------------------------------------------------------
+
+The script needs the base-model (non-fine-tuned) embedding cache
+  <cache>/llama_3.2_1B_arxiv_seqcls_pool-mean_based_model.pt
+If that file was never generated, the test could not run. Whatever the
+reason, "we did not run it" is not an acceptable answer to the reviewer.
+
+FIX: run it. Extracting base embeddings is a single forward pass of the
+frozen LLaMA-3.2-1B over 169K nodes (no training), i.e. much cheaper than
+any of the five LoRA fine-tunings already done for ArXiv. Then train the
+GraphSAGE on it and run the test. With about 33.9K test nodes the test
+will have very high power, so the result will be decisive either way.
+
+If you really cannot run it before resubmission, the only acceptable
+alternative is a sentence that says exactly why (e.g. "the base-model
+embeddings for OGBN-ArXiv were not extracted because of ...") AND the
+promise is weak - the reviewer will likely come back to it. Run it.
+
+Note for the text: Table 9 currently has Cora | PubMed | CiteSeer | WikiCS,
+while every other table uses Cora | CiteSeer | PubMed | WikiCS | ArXiv.
+Use the same order everywhere.
+
+
+---------------------------------------------------------------------
+4. PROBLEM D - TEST DIVERGE AGAINST BASELINES
+---------------------------------------------------------------------
+
+This is the most important part. Table 9 tests "fine-tuned single view vs
+base embeddings". It says nothing about "DIVERGE vs TAPE / ENGINE /
+LLaGA ...", which is the claim in the abstract and in Tables 5-6.
+
+The obstacle: the baseline numbers are copied from Wu et al. (2025). You do
+not have their per-node predictions, so McNemar (a paired, per-node test)
+is impossible against them. Split the problem in two:
+
+4.1  Paired per-node tests (McNemar) against IN-HOUSE comparators
+     Everything you train yourself on the same split has per-node
+     predictions. For each dataset test DIVERGE (the final ensemble,
+     e.g. Method 3) against:
+       (a) base LLaMA-3.2-1B embeddings + GraphSAGE    (no fine-tuning)
+       (b) best single LoRA view + GraphSAGE          (no ensemble)
+       (c) uniform average of the 5 views             (no learned head)
+       (d) seed-only ensemble (5 x Gaussian, diff. seeds) - if already run
+           for R2-C2 / R4-C1
+       (e) TAPE re-run in-house (repo already has TAPE/ ; R4-C2 asks for
+           this anyway) and STAGE/UltraTAG if re-run (R4-C4)
+     This directly answers "is the gain from fine-tuning, from diversity,
+     from the head, or from the method as a whole?" and makes Table 9 a
+     real ablation-significance table instead of a single side claim.
+     Family: 5 comparators x 5 datasets = 25 tests -> Holm over all 25
+     (or Holm per dataset, but say which).
+
+4.2  Unpaired tests against BORROWED baselines (Wu et al.)
+     Wu et al. report mean +/- std over several runs. Run DIVERGE with
+     several seeds (at least 5; ideally different split seeds, since the
+     reviewer also asks for mean +/- std in R4-C2) and use Welch's t-test
+     from summary statistics:
+         scipy.stats.ttest_ind_from_stats(m1, s1, n1, m2, s2, n2,
+                                          equal_var=False)
+     Compare DIVERGE with the strongest baseline per dataset (TAPE, and
+     LLaGA on ArXiv), Holm over the 5 datasets.
+     State the caveat clearly: this test compares the numbers as reported;
+     it cannot remove differences in split, hardware or tuning between the
+     two sources (which is also the reason for re-running TAPE in 4.1).
+
+     NOTE: Tables 5-6 currently show "+/-0.00" for every row. That is a
+     placeholder and must be filled with real std values (or removed) -
+     a reviewer will read +/-0.00 as "single run".
+
+4.3  (Optional) across datasets: Friedman test + critical-difference
+     diagram (Demsar 2006). With only 5 datasets the power is low
+     (a Wilcoxon signed-rank test over 5 datasets cannot go below
+     p = 0.0625 two-sided), so use it only as supporting evidence, never
+     as the main test.
+
+
+---------------------------------------------------------------------
+5. BUG IN experiments/hypothesis_testing_fintuned_unfinetuned.py
+---------------------------------------------------------------------
+
+At the bottom of the script:
+
+    titles = ["Based_Model", "Pissa"]
+    run_hypthesis_testing_per_sample(model_based_model, model_eva, ...,
+                                     emb_eva, based_model_data_emb)
+
+The model and embeddings passed are EVA, but the title printed is "Pissa".
+So the printed conclusion says "Pissa is significantly better ..." while
+the test was actually run on EVA. Before re-running:
+  - decide which fine-tuned model Table 9 is about (and say it in the
+    caption: "base vs. EVA-initialized LoRA"), OR better
+  - test every view AND the DIVERGE ensemble against the base model, so the
+    choice of view cannot look cherry-picked.
+Check which one produced the current Table 9 numbers before writing the
+caption.
+
+
+---------------------------------------------------------------------
+6. CODE CHANGES
+---------------------------------------------------------------------
+
+In hypothesis_testing_fintuned_unfinetuned.py (or a new
+experiments/significance_tests.py):
+
+  1. Loop over all five datasets, including arxiv (generate the arxiv base
+     cache first).
+  2. Return the correctness vectors (per test node) of every model, not
+     only the final contingency table, so any pair can be tested.
+  3. One test function used everywhere (keep the current rule or go fully
+     exact; whichever you write in the paper):
+         b = (a_ok & ~b_ok).sum(); c = (~a_ok & b_ok).sum()
+         if b + c < 25: p = binomtest(b, b + c, 0.5).pvalue   (exact)
+         else:          chi2 = (abs(b-c)-1)**2/(b+c); p = chi2.sf(chi2, 1)
+  4. Holm over the family: reuse holm() from
+     experiments/ensemble_experiments/exp4_stability_significance.py
+     (move it to a shared utils module). Also output Bonferroni-adjusted p.
+  5. Effect size: (c-b)/n with a paired bootstrap 95% CI
+     (bootstrap_gain_ci() from exp4 already does this).
+  6. Write one CSV row per (dataset, model_A, model_B): n, both_correct,
+     b, c, both_wrong, chi2, p_raw, p_bonf, p_holm, diff, ci_low, ci_high.
+  7. Fix the EVA / PiSSA title bug.
+  8. For 4.2: a small script that reads DIVERGE's multi-seed results and
+     Wu et al.'s mean/std/n and runs ttest_ind_from_stats + Holm.
+
+
+---------------------------------------------------------------------
+7. LATEX TO PUT IN THE PAPER
+---------------------------------------------------------------------
+
+7.1 Replace the equation and the paragraph after it:
+
+\revfour{The McNemar statistic with Edwards' continuity correction is
+\begin{equation}
+\chi^2 = \frac{\left(|b - c| - 1\right)^2}{b + c},
+\label{eq:mcnemar}
+\end{equation}
+which follows a $\chi^2$ distribution with one degree of freedom under
+$H_0$. When $b+c<25$ the exact binomial form of the test is used instead.
+Because the same hypothesis is tested on several datasets, the $p$-values
+are adjusted with the Holm--Bonferroni procedure \citep{holm1979simple},
+which controls the family-wise error rate at $\alpha=0.05$ and is uniformly
+more powerful than the Bonferroni correction. For transparency we also
+report the Bonferroni-adjusted $p$-values and, as effect sizes, the
+accuracy difference $(c-b)/n$ and the discordant odds ratio $c/b$.}
+
+(add holm1979simple to references.bib:
+ Holm, S. (1979). A simple sequentially rejective multiple test procedure.
+ Scandinavian Journal of Statistics, 6(2), 65-70.)
+
+7.2 Table 9: column order Cora, CiteSeer, PubMed, WikiCS, ArXiv; add rows
+    "Accuracy difference (pp)", "c/b", "Bonferroni-adj. p", "Holm-adj. p";
+    caption states which fine-tuned view is tested and that chi^2 is
+    continuity-corrected.
+
+7.3 Replace the conclusion paragraph under Table 9 with (fill ArXiv):
+
+\revfour{After Holm--Bonferroni correction the fine-tuned embeddings are
+significantly better than the base embeddings on all five datasets. The
+evidence is very strong on Cora, CiteSeer, PubMed and OGBN-ArXiv
+(adjusted $p<10^{-3}$, accuracy gains of $4.4$--$9.8$ pp), and weaker on
+WikiCS: its gain is small ($+1.37$ pp, $c/b=1.46$), and its $p$-value
+($0.0181$) passes the Holm threshold but not the more conservative
+Bonferroni bound ($0.0125$ for four tests).}
+
+7.4 New table/paragraph for Section 4 ("DIVERGE vs. comparators"):
+    one row per comparator (base+SAGE, best single view, uniform average,
+    seed-only ensemble, TAPE in-house), per dataset: accuracy difference
+    and Holm-adjusted McNemar p. Plus one sentence per 4.2 on the
+    Welch tests against the reported baselines, with the split caveat.
+
+
+---------------------------------------------------------------------
+8. OTHER PLACES IN THE PAPER THAT MUST CHANGE
+---------------------------------------------------------------------
+
+  - Discussion ("Third, LLM fine-tuning itself yields statistically
+    significant downstream gains, as confirmed by McNemar's test on four
+    datasets") -> "on all five datasets after Holm correction, with weaker
+    evidence on WikiCS".
+  - Conclusion ("statistical analysis using McNemar's test demonstrated
+    that fine-tuning ...") -> same softening; and ADD the new result that
+    DIVERGE is significantly better than its in-house comparators /
+    baselines (only where it actually is).
+  - Any "significantly outperforms" claim about a baseline must now point
+    to a test in Section 4; if the test is not significant for some
+    dataset (quite possible on ArXiv: 77.89 vs 77.69, see R4-C6), write
+    "comparable" there. This also helps with R4-C6.
+  - Tables 5-6: replace the +/-0.00 placeholders.
+
+
+---------------------------------------------------------------------
+9. DRAFT RESPONSE TO THE REVIEWER
+---------------------------------------------------------------------
+
+Response:
+
+We thank the reviewer for the careful reading of our statistical analysis;
+all four points were correct and have been addressed.
+
+(1) Formula. The values in Table 9 were computed with Edwards' continuity-
+corrected McNemar statistic, whereas Eq. (36) showed the uncorrected form.
+We have corrected Eq. (36) to $\chi^2=(|b-c|-1)^2/(b+c)$, which reproduces
+all values in the table, and we now state that the exact binomial version
+is used when $b+c<25$.
+
+(2) Multiple comparisons. We agree that a correction is needed. We now
+adjust all $p$-values with the Holm--Bonferroni procedure, which controls
+the family-wise error rate at the same level as the Bonferroni correction
+and is uniformly more powerful; the same procedure is used for all other
+tests in the paper. Table 9 now reports both Bonferroni- and Holm-adjusted
+$p$-values together with effect sizes. As the reviewer notes, the WikiCS
+result ($p=0.0181$) does not pass the plain Bonferroni bound; it does pass
+Holm. We now describe the WikiCS evidence as weaker and note that its gain
+is small ($+1.37$ pp), while the effects on the other datasets are large
+($+4.4$ to $+9.8$ pp) and remain significant under either correction.
+
+(3) OGBN-ArXiv. [Its base-model embeddings had not been extracted at the
+time of submission.] We have now run the test on OGBN-ArXiv
+([n] test nodes, $b=\dots$, $c=\dots$, Holm-adjusted $p=\dots$), and Table 9
+covers all five datasets.
+
+(4) Tests against baselines. We agree that the fine-tuned-vs-base test does
+not test the main claim. We added a new analysis (Section X, Table Y):
+(a) paired McNemar tests on identical test nodes between DIVERGE and every
+comparator we trained under the same split -- the base-model embeddings,
+the best single LoRA view, the uniform average of the views, the seed-only
+ensemble, and TAPE re-implemented in our pipeline -- with Holm correction
+over all comparisons; and (b) because per-node predictions of the baselines
+taken from Wu et al. (2025) are not available, Welch's $t$-tests between
+the mean$\pm$std of DIVERGE over [5] seeds and the reported mean$\pm$std of
+the strongest baseline on each dataset. [DIVERGE is significantly better
+than ... on ...; on OGBN-ArXiv the difference to ... is not significant and
+we now describe the results there as comparable.] We have revised the
+Discussion and Conclusion accordingly.
+
+(Fill the brackets with the real numbers; keep the sentence about
+non-significant cases even if it is only one dataset - the reviewer
+explicitly asked for honest reporting and will trust the rest more.)
+
+
+---------------------------------------------------------------------
+10. CHECKLIST
+---------------------------------------------------------------------
+
+  [ ] Fix EVA/PiSSA title bug; confirm which view produced Table 9
+  [ ] Generate arxiv base-model embedding cache; run base vs fine-tuned
+  [ ] Refactor test script: all datasets, CSV output, Holm + Bonferroni,
+      effect sizes with bootstrap CI
+  [ ] Run DIVERGE vs in-house comparators (base, best view, uniform,
+      seed-only, TAPE) on all 5 datasets
+  [ ] Run DIVERGE with >=5 seeds; Welch tests vs Wu et al. numbers
+  [ ] Fill +/- std in Tables 5-6
+  [ ] Update Eq. (36), Table 9, text under Table 9, new comparison table
+  [ ] Update Discussion + Conclusion wording
+  [ ] Add holm1979simple to references.bib
+  [ ] Write final response with real numbers

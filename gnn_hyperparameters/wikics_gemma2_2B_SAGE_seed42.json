@@ -1,0 +1,80 @@
+{
+    "seed": 42,
+    "device": 1,
+    "dataset": "wikics",
+    "gnn_model_name": "SAGE",
+    "llm_name": "gemma2_2B",
+    "epochs": 200,
+    "early_stop": 20,
+    "re_split": 1,
+    "lr": 0.001,
+    "hidden_dim": 256,
+    "num_layers": 3,
+    "dropout": 0.5,
+    "weight_decay": 0.0,
+    "batch_norm": 1,
+    "tuning": {
+        "init_weight_approach": "eva",
+        "peft_type": "lora",
+        "embedding_cache": "artifacts\\cache\\gemma2_2B_wikics_seqcls_lora_init-eva_pool-mean_seed42_semi_supervised.pt",
+        "trial_log": "results\\gnn_tuning\\wikics_gemma2_2B_SAGE_supervised_seed42_init-eva\\trials.jsonl",
+        "search_space": {
+            "learning_rate": [
+                0.01,
+                0.005,
+                0.001,
+                0.0001
+            ],
+            "hidden_dim": [
+                128,
+                256,
+                512,
+                1024
+            ],
+            "num_layers": [
+                2,
+                3
+            ],
+            "dropout": [
+                0.0,
+                0.1,
+                0.01,
+                0.5
+            ],
+            "weight_decay": [
+                0.0,
+                0.01
+            ],
+            "batch_norm": [
+                0,
+                1
+            ]
+        },
+        "val_acc": 89.64333333333333,
+        "val_acc_std": 0.16357125528514202,
+        "test_acc": 89.86333333333334,
+        "test_acc_std": 0.3859476072675668,
+        "val_f1": 88.63666666666667,
+        "test_f1": 89.13333333333333,
+        "val_acc_per_seed": [
+            89.87,
+            89.57,
+            89.49
+        ],
+        "test_acc_per_seed": [
+            89.32,
+            90.09,
+            90.18
+        ],
+        "eval_seeds": [
+            42,
+            1042,
+            2042
+        ],
+        "n_candidates": 512,
+        "n_promoted": 16,
+        "search": "random",
+        "total_time_sec": 3209.3,
+        "timestamp": "2026-09-30 05:40:12"
+    }
+}

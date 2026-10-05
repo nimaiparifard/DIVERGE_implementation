@@ -1,0 +1,639 @@
+i have gotten review for diversity represention in seeds and lora intilization
+rev1 Comment 2. The paper should explain why different LoRA initialization strategies necessarily produce meaningful and complementary semantic views rather han merely random training variance.t
+rev2 Comment 1. The paper assumes that different LoRA initializations lead to diverse and complementary representations, but the relationship between initialization diversity and representation diversity is not sufficiently justified.
+rev3 or 4 Comment 1. Comment 1)The paper assumes that different LoRA initializations lead to diverse and complementary representations, but the relationship between initialization diversity and representation diversity is not sufficiently justified.
+rev3 Comment 2) Could the authors compare the proposed multi-initialization strategy with an ensemble using the same LoRA initialization but different random seeds, to further analyze the impact of initialization diversity?
+
+for this we add section 7.2. Why do different LoRA initializations yield different representations? 
+in this section we want to show diversity in the process that was good 
+the process contains: the adapter weights, the LLM embeddings, the GNN embeddings and the GNN predictions
+
+now i have run experiments for cora and citeseer
+explain simply the experiments(explain simply) that deisgn for the each 4 part of the process and bring result of cora and citeseer and 
+explain this question that they are gonna significant or not and explain this expeeriment which comment of three above anwered. 
+if two dataset does not signifacntly pass the pass experiment for part of the process and with that i can not show diversity so process below experiment 10 diffrent experinment of dataset pass that experiment i can claim and pass this part
+
+
+
+=====================================================================
+ANSWER: THE 4 STAGES, CORA vs CITESEER, SIGNIFICANCE, WHICH COMMENT
+=====================================================================
+
+
+Source of all numbers: results/diversity/{lora_subspace,seed_vs_init,
+knn_neighborhood}/<dataset>_<llm>_lora_sup_SAGE_gnnseed42_report.txt
+(supervised 60/20/20 split, GraphSAGE, GNN seed 42, LoRA r=8,
+LoRA seeds 42-45). 3 LLMs per dataset: Gemma-2-2B, LLaMA-3.2-1B,
+SmolLM2-1.7B. Longer details: explain_diversity_experiments.txt, sec. 13.
+
+(!) = CiteSeer + LLaMA. Two members of this pool collapsed (ORTHOGONAL
+seeds 42 and 44, ~18-28% accuracy). Its numbers are shown but NOT counted
+as evidence.
+
+
+---------------------------------------------------------------------
+0. THE COMMENTS, IN ONE LINE EACH
+---------------------------------------------------------------------
+
+  R1-C2  "Are the views meaningful and complementary, or only random
+          training variance?"              -> needs a SEED-NOISE BASELINE
+  R2-C1  "Why does init diversity lead to representation diversity?"
+                                          -> needs a MECHANISM / LINK
+  R3-C1  same text as R2-C1               -> same answer as R2-C1
+  R3-C2  "Compare with an ensemble of the SAME init with DIFFERENT seeds"
+                                          -> needs SAME-INIT, MULTI-SEED
+                                             members and ensembles
+
+
+---------------------------------------------------------------------
+1. THE SIMPLE IDEA BEHIND ALL EXPERIMENTS
+---------------------------------------------------------------------
+
+  The pool: every init (PiSSA, Orthogonal, Gaussian, LoftQ, EVA) is
+  fine-tuned 4 times with 4 LoRA seeds (42-45) -> 5 x 4 = 20 models.
+  (Cora + LLaMA: 16 models, Orthogonal seed caches are missing.)
+  On each model we train one GNN with the SAME GNN seed. So two models
+  can differ only in their init, only in their seed, or in both.
+
+  For every pair of models we measure "how different are they" at one
+  stage of the pipeline, and put the pair in one of three groups:
+
+    seed-only : same init, different seed   = pure training randomness
+    init-only : different init, same seed   = pure init effect
+    both      : different init and seed
+
+  Then we ask two questions at every stage:
+
+    Q1 (weak)   Does the init ADD diversity on top of the seed?
+                Test: "both" pairs vs "seed-only" pairs, permutation
+                test (2000 shuffles). Significant = p < 0.05.
+    Q2 (strong) Does the init change things MORE than the seed?
+                Ratio = init-only / seed-only. Ratio > 1 = yes.
+                Test: one-sided Mann-Whitney. Significant = p < 0.05.
+
+  And one link question between neighbouring stages:
+
+    LINK  Are pairs that are far apart in stage k also far apart in
+          stage k+1? Test: Mantel test (Spearman rho, permutations).
+
+  Q1 answers "init is not zero / not only noise".
+  Q2 answers "init is a bigger source of diversity than the seed".
+  LINK answers "the init effect travels down the pipeline".
+
+  Rule used below: a stage PASSES on a dataset if the test is significant
+  for at least 2 of the 3 LLMs (CiteSeer + LLaMA is not counted, so on
+  CiteSeer it means both Gemma and SmolLM).
+
+
+---------------------------------------------------------------------
+2. STAGE 1 - ADAPTER WEIGHTS
+---------------------------------------------------------------------
+
+  What we did (simple)
+    Each LoRA layer only changes the model inside a small 8-dimensional
+    "window" (the row space of A = where it reads, the column space of B =
+    where it writes). For two models we check how much their windows
+    overlap, averaged over all LoRA layers. 1 - overlap = distance.
+    0 = same window, 1 = completely different window.
+    Extra: we check WHERE each window sits in the pretrained weight W:
+    on its strongest directions (top singular vectors) or its weakest.
+
+  Results (distance of the trained update B*A)
+                       seed-only  init-only  ratio   Q2 p     Q1 p
+    Cora     Gemma       0.64      1.00      1.57x   0.004    <0.001
+    Cora     LLaMA       0.53      1.00      1.89x   0.002    <0.001
+    Cora     SmolLM      0.60      1.00      1.66x   <0.001   <0.001
+    CiteSeer Gemma       0.64      1.00      1.56x   0.006    <0.001
+    CiteSeer LLaMA (!)   0.62      1.00      1.61x   0.017    <0.001
+    CiteSeer SmolLM      0.60      1.00      1.66x   <0.001   <0.001
+    (row(A) and col(B) give the same picture: ratio 1.55-1.96x, all p<0.02)
+
+  Seed-only distance per init (same for both datasets):
+    PiSSA 0.01-0.06, LoftQ 0.03-0.14  -> the seed almost does not move them
+    Gaussian, Orthogonal, EVA ~0.96-1.0 -> the seed is part of their init
+                                          (random A or sampled batches)
+
+  Where the window sits (overlap with top-8 directions of W; random ~0.006):
+    PiSSA ~0.96-0.99 (top directions), LoftQ ~0.05-0.09 (leans to top),
+    Gaussian / Orthogonal / EVA ~random. Std over seeds ~0.000, and the
+    same on both datasets and all 3 LLMs.
+
+  Significant?
+    YES. Q1 and Q2 significant in 6/6 pools.  Cora PASS, CiteSeer PASS.
+    This is the only stage where "init > seed" holds everywhere.
+
+  Which comment it answers
+    R2-C1 / R3-C1: this is the mechanism. Each init makes the adapter work
+    in a different, fixed part of the pretrained weights, and different
+    inits end in almost orthogonal windows.
+    R1-C2 (partly): for PiSSA and LoftQ, changing the seed gives almost
+    the same adapter, but changing the init gives a new one. So for these
+    inits the diversity is clearly from the init, not from randomness.
+
+
+---------------------------------------------------------------------
+3. STAGE 2 - LLM EMBEDDINGS
+---------------------------------------------------------------------
+
+  What we did (simple)
+    Take the node embeddings that each fine-tuned LLM produces.
+    (a) Global shape: 1 - CKA between two models' embeddings (CKA = do
+        the two models see the same similarity structure between nodes;
+        not fooled by rotation). 0 = same, larger = more different.
+    (b) Local shape: for every node, its 10 nearest neighbours; distance =
+        share of neighbours that change between two models (k-NN).
+    (c) LINK from stage 1: Mantel test adapter distance -> embedding
+        distance.
+
+  Results
+                      (a) CKA                 (b) k-NN          (c) LINK
+                      ratio   Q2 p   Q1 p     ratio   Q2 p      rho    p
+    Cora     Gemma    1.20x   0.012  <.001    1.09x   0.012     0.61  <.001
+    Cora     LLaMA    0.93x   0.55   <.001    1.02x   0.32      0.76  <.001
+    Cora     SmolLM   0.97x   0.87   <.001    1.01x   0.34      0.13  0.11
+    CiteSeer Gemma    1.09x   0.062  <.001    1.11x   0.005     0.57  <.001
+    CiteSeer LLaMA(!) 1.14x   0.27   <.001    1.08x   0.08      0.68  <.001
+    CiteSeer SmolLM   0.83x   >0.99  <.001    1.01x   0.32      0.38  <.001
+
+    PERMANOVA (share of variance, init / seed):
+      Cora: Gemma 0.48/0.22, LLaMA 0.35/0.43, SmolLM 0.37/0.32
+      CiteSeer: Gemma 0.35/0.24, LLaMA(!) 0.33/0.15, SmolLM 0.29/0.45
+
+  Significant?
+    Q1 (init adds diversity):  6/6.        Cora PASS, CiteSeer PASS.
+    LINK (adapter -> emb):     Cora 2/3, CiteSeer 2/2.  both PASS.
+    Q2 (init > seed):          only Gemma (Cora CKA + k-NN, CiteSeer
+                               k-NN). 1/3 per dataset -> both FAIL
+                               by the 2-of-3 rule.
+
+  Which comment it answers
+    R2-C1 / R3-C1: LINK shows that models with more different adapters have
+    more different embeddings (rho 0.57-0.76 except Cora SmolLM).
+    R1-C2 + R3-C2: Q1 shows the init adds diversity beyond the same-init /
+    different-seed baseline. Q2 shows it is NOT larger than seed diversity
+    in general, only for Gemma.
+
+!!! bring only result that pass both q1 abd q2 and do not bring any other result okay. not for now
+!! design 5 diffrent experiemtn for this part
+
+
+---------------------------------------------------------------------
+4. STAGE 3 - GNN EMBEDDINGS
+---------------------------------------------------------------------
+
+  What we did (simple)
+    Same as stage 2, but on the GNN's last hidden layer (after message
+    passing over the graph). LINK = LLM-embedding distance -> GNN-embedding
+    distance.
+
+  Results
+                      CKA                     k-NN              LINK
+                      ratio   Q2 p   Q1 p     ratio   Q2 p      rho    p
+    Cora     Gemma    1.01x   0.26   <.001    1.03x   0.14      0.45  <.001
+    Cora     LLaMA    0.94x   0.68   <.001    0.98x   0.50      0.89  <.001
+    Cora     SmolLM   0.97x   0.59   0.11     0.99x   0.80      0.21  0.037
+    CiteSeer Gemma    1.08x   0.16   <.001    1.08x   0.010     0.59  <.001
+    CiteSeer LLaMA(!) 1.35x   0.30   0.034    1.02x   0.51      0.65  <.001
+    CiteSeer SmolLM   0.84x   0.97   <.001    0.99x   0.64      0.67  <.001
+
+  Significant?
+    Q1:   Cora 2/3 (SmolLM fails), CiteSeer 2/2.   both PASS.
+    LINK: 6/6.                                      both PASS.
+    Q2:   only CiteSeer Gemma k-NN (1 pool, 1 metric).   both FAIL.
+    Warning: in the leakage-free rerun of CiteSeer + Gemma (own split per
+    member, sec. 13.12) the GNN-level ratio drops to 0.68x (CKA) and 0.96x
+    (k-NN). So the one positive Q2 result at this stage is not robust.
+
+  Which comment it answers
+    R2-C1 / R3-C1: LINK shows the embedding differences survive the GNN.
+    R1-C2 + R3-C2: Q1 yes (init adds diversity), Q2 no (not more than seed).
+  
+  !!!  design 5 diffrent experiment for this part.
+
+---------------------------------------------------------------------
+5. STAGE 4 - GNN PREDICTIONS
+---------------------------------------------------------------------
+
+  What we did (simple)
+    For two models: share of test nodes where their GNNs predict a
+    different label (disagreement). LINK = GNN-embedding distance ->
+    disagreement.
+
+  Results
+                      seed-only init-only ratio  Q2 p   Q1 p    LINK rho  p
+    Cora     Gemma     0.057    0.056    0.99x  0.67   <.001    0.66   <.001
+    Cora     LLaMA     0.058    0.048    0.83x  0.99   0.010    0.45   0.007
+    Cora     SmolLM    0.080    0.072    0.90x  0.96   0.53     0.09   0.25
+    CiteSeer Gemma     0.088    0.087    0.99x  0.50   <.001    0.77   <.001
+    CiteSeer LLaMA(!)  0.201    0.231    1.15x  0.26   0.003    0.75   <.001
+    CiteSeer SmolLM    0.076    0.070    0.92x  0.91   0.001    0.77   <.001
+
+  Significant?
+    Q1:   Cora 2/3 (SmolLM fails), CiteSeer 2/2.   both PASS.
+    LINK: Cora 2/3, CiteSeer 2/2.                  both PASS.
+    Q2:   0 of 5 clean pools (all ratios 0.83-0.99).   both FAIL.
+
+  Which comment it answers
+    R2-C1 / R3-C1: the chain reaches the predictions (LINK).
+    R1-C2 / R3-C2: init + seed together give the most disagreement, and
+    init adds disagreement on top of seed (Q1). But two different inits
+    disagree about as much as two seeds of the same init (Q2 fails).
+
+    ! deisgn 5 experiment to pass both 
+
+---------------------------------------------------------------------
+6. SUPPORTING EXPERIMENTS (not a stage, but needed for R1-C2 and R3-C2)
+---------------------------------------------------------------------
+
+  Error consistency (are init differences systematic?)
+    ANOVA on per-class accuracy, seeds as replicates (seed = residual):
+    init main effect significant on CiteSeer for 3/3 LLMs (Gemma p=0.003),
+    0/3 on Cora. BUT it disappears in the leakage-free CiteSeer + Gemma
+    rerun (p=0.61). -> do not rely on it.
+
+  Complementarity (does diversity help the ensemble?)
+    Uniform averages, k = 4, seed-only vs multi-init ensembles:
+    multi-init >= seed-only on CiteSeer 3/3, Cora 1/3, never significant
+    (p = 0.18-0.57). More disagreement -> more gain (rho 0.15-0.40, all
+    significant). No uniform ensemble beats its best member in the
+    supervised split.
+
+  Seed-control ensemble (experiments/seed_control_ensemble.py) - this is
+  the literal answer to R3-C2
+    DIVERGE pool (5 inits) vs control pool (Gaussian x 5 seeds), same
+    split, heads selected on validation. Only Cora + LLaMA, splits 42/43
+    are done so far (results/seed_control/partial_cora_splits42_43/):
+      Uniform    +0.19 pp  (p = 0.50)
+      Method 1   +0.83 pp  (p = 0.33)
+      Method 2   +1.29 pp  (p = 0.09; McNemar pooled p = 0.065)
+      Method 3   +0.46 pp  (p = 0.12)
+    Positive in every method, not yet significant (only 2 splits).
+
+    ! bring it for just two split and not mention split number
+
+---------------------------------------------------------------------
+7. SCOREBOARD: WHICH STAGE CAN BE CLAIMED NOW
+---------------------------------------------------------------------
+
+                         Q1 init adds      LINK from        Q2 init > seed
+                         Cora  CiteSeer    Cora  CiteSeer   Cora  CiteSeer
+  1 Adapter weights      PASS  PASS        (start)          PASS  PASS
+  2 LLM embeddings       PASS  PASS        PASS  PASS       fail  fail  (Gemma only)
+  3 GNN embeddings       PASS  PASS        PASS  PASS       fail  fail
+  4 GNN predictions      PASS  PASS        PASS  PASS       fail  fail
+
+  What you CAN claim now, on both datasets:
+    - Different inits put the adapter in different, stable parts of the
+      weight spectrum, much more than seeds do (stage 1, Q1 + Q2).
+    - This difference travels through the whole pipeline (LINK at every
+      stage).
+    - At every stage the init adds diversity on top of training randomness
+      (Q1).
+  What you CANNOT claim now:
+    - That at the embedding / GNN / prediction level, init diversity is
+      LARGER than seed diversity (Q2 fails on both datasets for stages
+      2-4). Section 8 is the plan for this.
+
+
+---------------------------------------------------------------------
+8. FOLLOW-UP: 10-POOL EXPERIMENT FOR THE STAGES THAT FAIL ON BOTH DATASETS
+---------------------------------------------------------------------
+
+  Which stages: Q2 at stage 2 (LLM emb), stage 3 (GNN emb), stage 4
+  (predictions). Plus the R3-C2 ensemble comparison (seed control),
+  which is positive but not significant yet.
+
+  Why 10 pools and not just more seeds on Cora/CiteSeer
+    With 2 datasets you cannot tell "the effect does not exist" from "the
+    effect is small and each pool is too small to see it". 10 independent
+    pools give a test ACROSS pools, which is what a reviewer accepts as
+    "it holds in general".
+
+  8.1 The 10 pools (fix this list BEFORE running)
+    5 datasets x 2 LLMs:
+      datasets: Cora, CiteSeer, PubMed, WikiCS, Instagram
+      LLMs:     Gemma-2-2B, LLaMA-3.2-1B (the paper's main LLM)
+    (arXiv is too expensive at 20 fine-tunes per pool; if it is
+     affordable, swap it in for Instagram, but decide before running.)
+    Cora and CiteSeer are re-run, because the current pools have the
+    leakage problem (sec. 13.10) and cannot be reused as they are.
+
+  8.2 Clean design for every pool (fixes the 3 known problems)
+    - Same fine-tuning split for all 20 members (split seed 42); the LoRA
+      seed changes ONLY training randomness. This is exactly R3-C2's
+      "same initialization, different random seeds", and removes the
+      test-label leakage.
+    - Set the HF Trainer seed = LoRA seed (it was never set, so data order
+      and dropout were identical for all seeds). Without this, seed-only
+      pairs under-estimate training randomness.
+    - Check every member: test accuracy and embedding std. A member that
+      collapses (like CiteSeer + LLaMA Orthogonal 42/44) is retrained
+      once; if it fails again it is reported, and the pool is run with and
+      without it.
+    - 5 inits x 4 seeds, GNN seed fixed (42), same as now. Run all five
+      diversity scripts + seed_control_ensemble.py on each pool.
+
+  8.3 What "pass" means for one pool (per stage)
+    Pool passes stage k if ratio(init-only / seed-only) > 1. Record the
+    ratio and the one-sided Mann-Whitney p of every pool, pass or fail.
+
+  8.4 What lets you CLAIM a stage (decide this rule before running)
+    Claim "init diversity > seed diversity at stage k" only if BOTH:
+      (a) at least 9 of 10 pools have ratio > 1
+          (sign test: P(>= 9 of 10 by chance) = 0.011), and
+      (b) one-sided Wilcoxon signed-rank test of log(ratio) over the 10
+          pools has p < 0.05 (the effect is consistently above 0, not
+          only in sign).
+    For R3-C2 (seed control): same rule on the difference
+    "DIVERGE head accuracy - same-init-seeds head accuracy" over the 10
+    pools (Method 2 is the primary head; name it before running).
+
+    If a stage meets the rule -> write "in N of 10 dataset/LLM pools ...
+    (sign test p = ..., Wilcoxon p = ...)".
+    If not -> keep the claim of section 7 (init ADDS diversity, Q1) and
+    state Q2 as a limitation. Report all 10 pools in the appendix either
+    way; do not drop pools that fail.
+
+  8.5 Honest expectation
+    - Stage 2 (LLM embeddings) has a real chance: Gemma is > 1 on both
+      datasets, and the init explains more variance than the seed in 4 of
+      6 pools.
+    - Stage 3 and stage 4 are unlikely to pass Q2: all clean prediction
+      ratios are 0.83-0.99, and the GNN pulls the views together. More
+      pools give more power, but they cannot turn a ratio of ~0.95 into a
+      ratio > 1. Plan the paper text so it is still correct if they fail.
+    - The seed-control ensemble (R3-C2) is the most useful one to finish:
+      it compares what DIVERGE actually uses (the learned head), and the
+      first 2 splits are positive for every head.
+
+
+---------------------------------------------------------------------
+9. WHICH EXPERIMENT ANSWERS WHICH COMMENT (summary)
+---------------------------------------------------------------------
+
+  R2-C1 / R3-C1 (why init -> representation diversity)
+    Stage 1 (window distance + spectral position) = mechanism.
+    LINK tests in stages 2-4 = the effect travels to embeddings and
+    predictions. -> ANSWERED on both datasets.
+
+  R1-C2 (meaningful / complementary vs random variance)
+    Q1 at every stage = init adds diversity beyond randomness -> answered.
+    Stage 1 for PiSSA/LoftQ = seed barely moves them, init does -> answered.
+    Complementarity (diversity -> gain) -> answered.
+    Q2 at stages 2-4 = "more than randomness" -> NOT answered yet (sec. 8).
+    The word "necessarily" cannot be proven by any experiment; say so.
+
+  R3-C2 (same init, different seeds)
+    The whole seed-only vs init-only design (every stage) uses exactly this
+    baseline. The ensemble comparison is complementarity (uniform, n.s.)
+    and seed_control_ensemble.py (learned heads, positive, not yet
+    significant). -> PARTLY answered; finish the seed control (sec. 8).
+
+
+okay for now proporse and desing experiment for just question q2 and bring serparet section for q1 and q1 question 
+and not design 5 diffrent experiment for each part may be that experiment path q2.
+
+
+
+---------------------------------------------------------------------
+10. ONE EXPERIMENT FOR Q2 (all 4 stages at once)
+---------------------------------------------------------------------
+
+  Paper: template.tex, sec:initQ1 (Q1, done) and sec:initQ2 (Q2, paragraph
+  "Controlled experiment" + Table tab:q2, right half still empty).
+  Code: scripts/run_q2_experiment.bat ->
+        experiments/diversity_experiment/init_vs_training_noise.py
+        experiments/diversity_experiment/aggregate_q2.py
+        output results/diversity_q2/q2_across_pools.txt
+
+10.1 Why Q2 fails now (the baseline is not "only randomness")
+  In the current pool, "another seed" changes 3 things at once:
+    - the fine-tuning split (different labelled nodes, and the leakage)
+    - for Gaussian / Orthogonal / EVA: a NEW random A matrix, i.e. a new
+      init (seed-only adapter distance 0.96-1.00, as big as init-only)
+    - NOT the data order and dropout (HF Trainer seed was always 42)
+  So "seed-only" is partly an init change plus a split change. Comparing
+  init-only against it is unfair, and Q2 cannot be answered with it.
+
+10.2 The one experiment
+  ONE pool design, measured at all 4 stages with the same members (no
+  separate experiment per stage):
+    members  : 5 inits x 4 training seeds (42-45) = 20 per pool
+    same for every member:
+      - fine-tuning split  = split 42   (--split_seed 42)
+      - LoRA A/B draw      = draw 0     (--init_seed 0)
+      - GNN seed and split = 42 (the GNN uses the same split)
+    changes with the training seed only:
+      - classification-head init, data order, dropout (Trainer seed)
+  Now:
+    seed-only pair = SAME init, SAME starting adapter, different random
+                     training  -> exactly R3-C2's "same init, different
+                     random seeds"
+    init-only pair = different init strategy, same training seed
+  One distance per stage, fixed in advance:
+    adapter 1 - cos(BA) | LLM emb 1 - CKA | GNN emb 1 - CKA | predictions
+    disagreement.
+
+10.3 Test (decided BEFORE running)
+  In one pool: ratio = init-only / seed-only; crossed bootstrap
+    (resample inits and seeds) for the CI, because pairs share members.
+  Over 10 pools (cora, citeseer, pubmed, wikics, instagram x gemma2_2B,
+    llama_3.2_1B):
+    claim "init > seed" at a stage only if
+      sign test (pools with ratio > 1) p < 0.05  -> at least 9 of 10, and
+      one-sided Wilcoxon on log(ratio)   p < 0.05.
+  Report all 10 pools. If a stage fails, write it as a limitation; Q1
+  still holds.
+
+10.4 Why this can pass Q2 now
+  Removing the split change and the new A draw takes the two biggest
+  sources out of seed-only. What is left is real training noise, which
+  should be smaller than a change of strategy. The leakage also goes away.
+
+10.5 MUST FIX BEFORE RUNNING: "EVA" is not EVA in train_llm/
+  train_llm/peft_model.py:get_lora_model passes init_lora_weights="eva" to
+  PEFT, but never calls peft.initialize_lora_eva_weights(model, loader).
+  In PEFT, "eva" without that call only sets B = 0; A keeps the default
+  random (Kaiming-uniform) init of the Linear layer. So every "EVA" member
+  in the diversity pools (and the main DIVERGE runs that use train_llm/)
+  is a plain random-A LoRA, close to Gaussian. This explains why EVA
+  looks "near random" in the spectral table and why its seed-only
+  distance is ~1.0. Only train_eff_llm/train_and_cache.py runs real EVA
+  (EvaConfig + initialize_lora_eva_weights).
+  Effects:
+    - In the Q2 experiment, EVA vs Gaussian is "two random draws", which
+      pulls the init-only distance down; Q2 is harder to pass.
+    - The paper's Mechanism paragraph says EVA uses "the principal
+      directions of the input activations". That is not what was trained.
+  Options (your decision):
+    (a) add the real EVA init to get_lora_model (as train_eff_llm does)
+        before running Q2; the main DIVERGE EVA results then stay on the
+        old init, so the paper must describe both, or rerun them;
+    (b) keep it, and in the paper call this view "Kaiming-uniform LoRA
+        (PEFT default)" instead of EVA.
+
+
+
+=====================================================================
+11. COMPLETE DESIGN FOR Q2 (everything needed, in run order)
+=====================================================================
+
+  Q1 is answered (sec:initQ1 in template.tex, keep all 5 inits; removing
+  inits makes Q1 weaker, see the subset check of 2026-10-01).
+  Q2 = "is changing the init a BIGGER change than retraining the same
+  init with another random seed?"
+
+  Everything below uses ONE training campaign. The same trained models
+  answer Q2 for the representations (E1) AND for the ensembles (E3).
+  Only E0 (checks) and E2 (optional) need a few extra runs.
+
+  The reviewer's "different random seed" can mean two things, and Q2 must
+  answer both:
+    (i)  same starting adapter, different training randomness
+         (head init, data order, dropout)                    -> E1, E3
+    (ii) for random inits: a NEW random A matrix as well     -> E2
+  Deterministic inits (PiSSA, LoftQ) have no (ii): their start is fixed.
+
+
+---------------------------------------------------------------------
+E0. CHECKS BEFORE THE BIG RUN (1 pool, ~3 fine-tunes, 1 day)
+---------------------------------------------------------------------
+  E0.1 Fix or rename EVA (sec. 10.5). Decide first: the init list must not
+       change after the campaign has started.
+
+  E0.2 Same-start check. Build the LoRA model for 2 training seeds with
+       the same --init_seed, do NOT train, and compare the A and B matrices
+       of every layer. They must be identical (max abs diff = 0), and the
+       classification heads must differ. If A differs, --init_seed does not
+       work and every Q2 number would be wrong.
+       (Code reading says it works: train.py sets the training seed, loads
+       the head, sets init_seed, builds LoRA, sets the training seed back.
+       But check it once on the GPU machine.)
+
+  E0.3 Noise floor. Train ONE member twice with exactly the same seeds
+       (e.g. Gaussian, training seed 42, both times). Measure the 4 stage
+       distances between the two copies. This is GPU non-determinism.
+       Seed-only distances in E1 must be clearly above this floor;
+       otherwise "training noise" is only hardware noise and Q2 is
+       trivially "passed". Report the floor in the appendix.
+
+  E0.4 Collapse guard. After each fine-tune, check test accuracy and the
+       embedding std (CiteSeer + LLaMA Orthogonal 42/44 collapsed to
+       ~19-28%). A collapsed member is retrained once with the same seeds;
+       if it collapses again, keep it, flag it (--collapse_pp) and report
+       the pool with and without it (--exclude_collapsed).
+
+
+---------------------------------------------------------------------
+E1. MAIN EXPERIMENT: CONTROLLED POOLS (answers Q2 at all 4 stages)
+---------------------------------------------------------------------
+  Pools (fixed now, never changed after seeing results):
+    5 datasets x 2 LLMs = 10 pools
+    datasets: cora, citeseer, pubmed, wikics, instagram
+    LLMs:     gemma2_2B, llama_3.2_1B
+
+  Members per pool: 5 inits x 5 training seeds (42-46) = 25
+    (5 seeds instead of 4, so the SAME models also give 5-member
+     single-init ensembles for E3; costs 50 extra fine-tunes in total)
+    for every member: --split 1 --split_seed 42 --init_seed 0
+    GNN: same split 42, same GNN seed, same hyperparameters.
+
+  What is measured (one distance per stage, fixed now):
+    1 adapter weights   1 - cos(BA)
+    2 LLM embeddings    1 - CKA
+    3 GNN embeddings    1 - CKA
+    4 GNN predictions   disagreement on test nodes
+    secondary: 10-NN neighbourhood distance on LLM and GNN embeddings
+
+  Test in one pool (init_vs_training_noise.py):
+    ratio = mean(init-only) / mean(seed-only)
+    crossed bootstrap over inits and seeds -> 95% CI, p(ratio <= 1)
+
+  Claim over the 10 pools (aggregate_q2.py), per stage:
+    CLAIM "init > seed" only if
+      sign test: >= 9 of 10 pools have ratio > 1   (p = 0.011)  AND
+      one-sided Wilcoxon on log(ratio)             p < 0.05
+    Report all 10 pools in the appendix, also the ones that fail.
+
+  Commands: scripts/run_q2_experiment.bat
+    (change TRAIN_SEEDS to 42 43 44 45 46, and --seeds 42,43,44,45,46)
+
+  Cost: 10 x 25 = 250 fine-tunes + caching.
+    Cheaper fallback if the GPU budget is too small: run cora + citeseer
+    first (4 pools, 100 fine-tunes). If all 4 pass a stage, add the other
+    6 pools. If 2 or more of the 4 fail a stage, that stage cannot reach
+    9/10 any more; stop and write it as a limitation.
+
+
+---------------------------------------------------------------------
+E2. RANDOM-DRAW ARM (answers meaning (ii), optional but recommended)
+---------------------------------------------------------------------
+  Question: is a different init STRATEGY a bigger change than a new
+  random draw of the SAME random strategy?
+
+  Extra members, only for the random inits (Gaussian, Orthogonal, and
+  EVA if it stays random), at training seed 42:
+    --init_seed 1, 2, 3   -> 3 inits x 3 draws = 9 extra fine-tunes/pool
+  Run on 4 pools (cora, citeseer x 2 LLMs) = 36 fine-tunes.
+
+  Pairs (all with training seed 42):
+    draw-only     : same random strategy, different init_seed
+    strategy-only : different strategy, same init_seed (from E1)
+  Ratio = strategy-only / draw-only, same bootstrap, same 4 stages.
+  Report it separately for
+    - deterministic vs random  (PiSSA/LoftQ vs Gaussian/Orthogonal)
+    - random vs random         (Gaussian vs Orthogonal vs EVA)
+
+  Expected honest result: "random vs random" ~ 1 (two random strategies
+  are like two random draws), "deterministic vs random" > 1. Then the
+  paper says: the strategies that choose WHERE to adapt (PiSSA, LoftQ,
+  real EVA) give diversity that a new random seed cannot give; the random
+  strategies are one family. That is a real, defensible answer.
+
+  Needs: init_vs_training_noise.py to accept extra (init, init_seed)
+  members and a "draw-only" pair group (not written yet).
+
+
+---------------------------------------------------------------------
+E3. ENSEMBLE ARM (answers R3-C2 directly; no extra fine-tunes)
+---------------------------------------------------------------------
+  Uses the E1 models of each pool (all on split 42, 5 x 5 grid).
+
+    multi-init ensemble  : the 5 inits at one training seed t
+                           -> 5 ensembles (t = 42..46)
+    single-init ensemble : one init with its 5 training seeds
+                           -> 5 ensembles (one per init)
+  Same size (5 members), same GNNs, same heads: uniform + DIVERGE
+  Methods 1-3, configuration and epoch selected on VALIDATION.
+
+  Per pool: diff = mean acc(multi-init) - mean acc(single-init).
+    Also report the best single-init ensemble (the strongest "seed
+    ensemble" a practitioner could pick) as a harder baseline.
+  Over 10 pools: same rule as E1 (>= 9/10 positive + Wilcoxon p < 0.05),
+  primary head = Method 2 (named now).
+
+  This is better than the current seed_control_ensemble.py, which only
+  uses Gaussian as the control and whose DIVERGE members have the old
+  leakage split and Trainer seed 42. Keep its 2 finished Cora splits as
+  a pilot result only.
+
+  Needs: a variant of seed_control_ensemble.py that reads the controlled
+  caches (..._seed{t}_split42_init0_...) and builds the two ensemble
+  families above (not written yet).
+
+
+---------------------------------------------------------------------
+SUMMARY: WHAT EACH PART ANSWERS AND WHAT GOES IN THE PAPER
+---------------------------------------------------------------------
+  Part  Runs           Answers                         Paper
+  E0    ~3             validity (same start, floor)    appendix, 1-2 lines
+  E1    250            Q2 at 4 stages, R1-C2, R3-C2    Table tab:q2 right half
+  E2    36 (optional)  Q2 meaning (ii), which inits    1 paragraph + small table
+  E3    0              R3-C2 (ensembles)               replaces Table
+                                                       seed_multi_ensemble
+
+  Run order: E0 -> E1 on cora + citeseer -> decide (fallback rule) ->
+  E1 other pools + E3 -> E2.
+
+  Code still to write: E0.2 check script, E2 draw-only pairs,
+  E3 ensemble script. E1 is ready (run_q2_experiment.bat).

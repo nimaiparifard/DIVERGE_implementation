@@ -1,0 +1,170 @@
+Reviewer 1 - Comment 8
+======================
+
+"The privacy-sensitive deployment claim is promising, but the paper should discuss local model
+security, data governance, and whether node texts can still leak through saved embeddings."
+
+
+1. Is the reviewer right?
+-------------------------
+
+Yes. This is a fair and friendly comment ("promising"). It asks for a discussion, not a new method.
+
+What the paper currently says:
+  - Abstract (template.tex line ~118): "well suited to privacy-sensitive settings"
+  - Contributions (lines ~171-172): node text stays "within the operator's trusted infrastructure"
+  - Section 3 (line ~266): "DIVERGE avoids this risk"
+  - Conclusion (line ~1242): "privacy-PRESERVING deployment path"
+  - Empty subsection "Analysis of Privacy Sensitive" (line ~1176)
+
+The problem: the paper implies that "local = private". That is only true for ONE threat (sending text
+to a third-party API provider). Local deployment creates new artifacts that can themselves leak text:
+  - 5 sets of saved node embeddings
+  - 5 LoRA adapters fine-tuned on the node texts (can memorize them)
+  - 5 GNNs + ensemble head
+  - cached / tokenized datasets on disk
+
+So we should (a) narrow the claim, (b) define a threat model, (c) discuss leakage and mitigations,
+and optionally (d) add one small leakage experiment.
+
+
+2. Suggested structure for the new subsection ("Privacy and security considerations")
+-------------------------------------------------------------------------------------
+
+2.1 Threat model (one short paragraph)
+  - What DIVERGE protects against: disclosure of node text to external LLM/API providers
+    (logging, retention, training on user data, cross-border transfer).
+  - What DIVERGE does NOT protect against by itself: an insider or attacker who obtains the local
+    artifacts (embeddings, adapters, models), or a compromised local machine.
+  - State explicitly: DIVERGE gives NO formal privacy guarantee (e.g. no differential privacy).
+    Its benefit is reducing the attack surface / number of parties that see the text.
+
+2.2 Artifact-level risk table (good to include in the paper)
+
+| Artifact              | Contains text info?        | Leakage risk                          | Mitigation                                  |
+|-----------------------|----------------------------|---------------------------------------|---------------------------------------------|
+| Raw node texts        | Yes (fully)                | Same as any local dataset             | Access control, encryption at rest          |
+| Node embeddings (x5)  | Yes (dense encoding)       | Embedding inversion / attribute       | Don't release; encrypt; delete after GNN    |
+|                       |                            | inference (e.g. vec2text)             | training; optional noise / DP               |
+| LoRA adapters (x5)    | Indirectly (memorization)  | Membership inference, training-data   | Treat as sensitive as data; DP-LoRA         |
+|                       |                            | extraction                            | (DP-SGD) as option                          |
+| GNNs + ensemble head  | Weakly (labels/logits)     | Membership / attribute inference      | Lower risk; still restrict access           |
+| Base LLM weights      | No (public)                | Supply-chain (malicious weights/code) | Verified checksums, safetensors, pinned     |
+|                       |                            |                                       | versions, offline mode (no telemetry)       |
+
+2.3 Local model security
+  - Supply chain: download base model once from a trusted source, verify hash, load with
+    safetensors (no pickle code execution), pin library versions (we already pin the LLM stack).
+  - Run offline: disable hub/network access during training and inference
+    (e.g. HF_HUB_OFFLINE=1), no telemetry.
+  - Isolate the training machine / container; restrict who can read model and data directories.
+  - Adapters are small (MBs), so they are easy to copy out -> treat them as sensitive files.
+
+2.4 Data governance
+  - Data residency: text never leaves the organization -> easier compliance (GDPR, HIPAA,
+    institutional policies) than API pipelines that need data-processing agreements.
+  - Access control + audit logs on raw text, embeddings and adapters.
+  - Retention and deletion: if a node/document must be deleted ("right to be forgotten"), its
+    embedding can be deleted directly, but the LoRA adapters and GNNs trained on it must be
+    retrained (or machine unlearning applied). State this honestly as a cost.
+  - Versioning / provenance: record which data version produced which adapters and embeddings.
+
+2.5 Can node text leak through saved embeddings? (the key question)
+  - Answer honestly: YES, potentially. Prior work shows dense text embeddings can be inverted to
+    recover much of the original text or its keywords:
+      * Song & Raghunathan (2020), "Information Leakage in Embedding Models", CCS
+      * Morris et al. (2023), "Text Embeddings Reveal (Almost) As Much As Text", EMNLP (vec2text)
+    And fine-tuned LMs can memorize training data:
+      * Carlini et al. (2021), "Extracting Training Data from Large Language Models", USENIX Sec.
+      * Shokri et al. (2017), "Membership Inference Attacks against ML Models", IEEE S&P
+  - Therefore: embeddings and adapters must be treated as being as sensitive as the raw text.
+  - Mitigations (discussion + future work, no need to implement all):
+      * never publish or share raw embeddings; share only final predictions if needed
+      * delete embeddings after GNN training when not needed; keep only GNN/ensemble
+      * encrypt at rest, restrict access
+      * add calibrated noise to embeddings, or train LoRA with DP-SGD
+        (Abadi et al., 2016; Yu et al., 2022 "Differentially Private Fine-tuning of Language
+        Models", ICLR) -> privacy/accuracy trade-off as future work
+      * federated / on-device variants as future work
+
+  (Verify all citations and add them to references.bib before using.)
+
+
+3. Optional small experiment (makes the response much stronger, cheap to run)
+----------------------------------------------------------------------------
+
+Keyword / attribute-inference probe on saved embeddings (e.g. Cora and PubMed):
+  - Pick the top-100 most frequent content words in the node texts.
+  - For each word, train a logistic-regression probe: embedding -> "does the text contain this
+    word?" using the train split; evaluate AUC on the test split.
+  - Compare: base (frozen) LLM embeddings vs each LoRA embedding vs (optional) embeddings with
+    Gaussian noise at several levels, reporting both probe AUC and GNN accuracy.
+  - Result shows: (i) how much text information is recoverable, (ii) that noise reduces leakage
+    at some accuracy cost -> quantified trade-off.
+
+Even simpler alternative: nearest-neighbor re-identification -- given an embedding, can we
+retrieve its own text among candidates using a public encoder? Report top-1 / top-10 rate.
+
+If there is no time: skip the experiment and write the discussion only; the reviewer asked to
+"discuss", so discussion is sufficient.
+
+
+4. Wording changes in the paper
+-------------------------------
+
+  - "privacy-preserving" -> "reduces third-party exposure of node text" /
+    "privacy-friendly local deployment"
+  - "DIVERGE avoids this risk" -> "DIVERGE avoids the risk of disclosing node text to external
+    API providers"
+  - Add one sentence wherever the privacy claim appears: "Local deployment does not by itself
+    provide formal privacy guarantees; see Section X.X."
+  - Add the privacy point to the Limitations section.
+
+
+5. Draft response
+-----------------
+
+Response:
+
+We thank the reviewer for this valuable suggestion and agree that our original privacy claim
+needed to be stated more precisely. DIVERGE removes one specific risk, namely the disclosure of
+node texts to external LLM providers, but local deployment does not by itself guarantee privacy,
+because the artifacts produced locally can still carry information about the texts.
+
+In the revised manuscript we added Section X.X ("Privacy and security considerations"), which:
+
+(1) defines the threat model: DIVERGE protects against third-party disclosure through API calls,
+but not against an insider or attacker who obtains the local artifacts, and it provides no formal
+privacy guarantee such as differential privacy;
+
+(2) lists the sensitive artifacts (node embeddings, LoRA adapters, GNN/ensemble models) together
+with their leakage risks and mitigations (Table X);
+
+(3) discusses local model security, including verified and pinned model weights, safe weight
+loading, offline execution, and access isolation;
+
+(4) discusses data governance, including data residency, access control and auditing, versioning,
+and deletion requests, noting that removing a node requires deleting its embedding and retraining
+the adapters and GNNs; and
+
+(5) explicitly acknowledges, citing prior work on embedding inversion [Song & Raghunathan, 2020;
+Morris et al., 2023] and training-data extraction [Carlini et al., 2021], that saved embeddings and
+fine-tuned adapters can leak node text and should therefore be treated as sensitive as the raw
+data. We recommend not releasing embeddings, encrypting them at rest, and deleting them after
+training, and we identify differentially private LoRA fine-tuning and embedding perturbation as
+future work.
+
+[Optional, if the probe experiment is run:] We further quantified leakage with a keyword-inference
+probe on Cora and PubMed embeddings: a linear probe recovers word presence with an AUC of [..],
+and adding Gaussian noise with sigma = [..] reduces the AUC to [..] at a cost of [..] points of
+accuracy.
+
+Finally, we revised the wording in the Abstract, Introduction, and Conclusion from
+"privacy-preserving" to "reducing third-party exposure of node text", and we added this point to
+the Limitations section.
+
+
+Note:
+- This comment overlaps with the "Analysis of Privacy Sensitive" subsection (template.tex
+  line ~1176), which is currently empty; the new section can go there.
+- Fill in the bracketed numbers only if the probe experiment is actually run.

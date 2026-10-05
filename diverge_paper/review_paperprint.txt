@@ -1,0 +1,304 @@
+ Dear Editor and Reviewers,
+Thank you very much for your comments on our paper. We appreciate the insightful comments and helpful suggestions of the AE and reviewers. We have carefully studied the comments and modified the manuscript accordingly. In the following, we repeat the reviewers' comments and provide our response to each of them.
+In the revised version, we used the following colors to address reviewers' comments:
+Reviewer #1: Red
+Reviewer #2: Blue
+Reviewer #4: Dark green
+Common issues raised by several reviewers: Purple
+
+
+
+
+===============================================================
+Reviewer 1 - Initial submission, June 21
+The paper presents DIVERGE, a representation-aware text-attributed graph encoding framework that generates diverse node representations through multiple LoRA initializations of a local LLM and combines the resulting GNN outputs using adaptive ensemble learning. The topic is relevant to Information Processing & Management, especially for LLM-enhanced graph representation learning and text-attributed graph mining. However, the current manuscript is not yet mature for publication, mainly because the methodological novelty is limited, the experimental comparison is not sufficiently rigorous, and the claimed advantages over augmentation-based LLM-GNN methods are not fully validated. Therefore, I recommend rejection in its current form, with encouragement to resubmit after substantial methodological clarification and more comprehensive experiments.
+
+
+Comment 1. The novelty of DIVERGE should be clarified more strongly, since using multiple LoRA initializations and ensemble learning is intuitive and close to standard model ensembling.
+
+Response:
+Thank you for this comment. We added two subsections to Related Work: "Ensemble learning and representation diversity" (Section 3.4)
+and "Research gap and position of DIVERGE" (Section 3.5, Table 1). Table 1 compares DIVERGE with TAPE, UltraTAG, LLM-BP, SKETCH and STAGE
+on augmented text, external API, source of diversity and aggregation. Most LLM-GNN methods get diversity from different modalities
+(augmented vs. original text), while DIVERGE gets it from several LoRA runs of the same encoder. Experiments support this difference:
+the initialization decides where in the weight spectrum each adapter learns and, when training randomness is isolated, it is a larger
+source of diversity than the seed (Section 7.2, Tables 6-10, Figure 3). The learned ensemble also differs from standard ensembling:
+it matches uniform averaging on balanced views and clearly improves over it when one view is weak (Section 7.3, Tables 11-12).
+DIVERGE is the only method with no augmentation, no API, multi-initialization LoRA and a learned ensemble.
+
+
+Comment 2. The paper should explain why different LoRA initialization strategies necessarily produce meaningful and complementary semantic views rather than merely random training variance.
+
+Response:
+We thank the reviewer and added Section 7.2 ("Why do different LoRA initializations yield different representations?").
+Mechanism: LoRA learns only inside the rank-8 subspace chosen at initialization, and the five strategies choose it very differently.
+Section 7.2.1 (CiteSeer, Gemma-2-2B, 5 initializations x 4 seeds): the initialization adds diversity beyond the seed at all four stages
+(adapters, LLM embeddings, GNN embeddings, predictions; Table 6, p < 0.001); each strategy keeps a stable region of the weight spectrum
+(Table 7), and these differences propagate downstream (Mantel rho = 0.53-0.59, Table 8). The differences are systematic (ANOVA, p = 0.003),
+and the uniform-ensemble gain grows with the number of distinct initializations (Figure 3). Section 7.2.2: in a controlled experiment
+(4 pools), the initialization changes members more than the seed at every stage (all 24 ratios 1.04-1.84; Table 9, right).
+We also state the limits: diversity is compressed along the pipeline, and for global embedding geometry and predictions the larger
+effect of the initialization is mostly not significant with pools of this size (Sections 7.2 and 9).
+
+
+Comment 3. The comparison with existing LLM-GNN methods should be made fairer, as many baseline results appear to be borrowed from prior studies rather than reimplemented under the same hardware, split, encoder, and tuning protocol.
+
+Response:
+We agree and re-ran the baselines under the same protocol as DIVERGE (Sections 6.1, 6.2 and 7, Tables 4 and 5):
+- Same four seeds (42-45), each fixing one 60/20/20 split; all methods use exactly the same test nodes; mean ± std is reported.
+- Same RTX 5070 GPU for all re-run methods.
+- Same LLaMA-3.2-1B backbone for TAPE, STAGE, LLM-BP, E-LLaGNN, UltraTAG and SKETCH; classical GNNs and encoder baselines keep their own features.
+- Same accuracy and Macro-F1 code (Section 6.5); the differences to the baselines are tested for significance (Table 23).
+Only GraphGPT and LLaGA, which instruction-tune a 7B LLM and do not fit on our GPU, are taken from LLMNodeBed. They use the same
+supervised 60/20/20 protocol averaged over several splits, but a different node assignment; we state this in Sections 6.1 and 7
+and treat them as indicative reference points.
+
+
+Comment 4. The computational cost is likely high because the method fine-tunes the LLM multiple times, and the authors should report training time, GPU memory, inference cost, and total parameter/storage overhead.
+
+Response:
+We added Section 7.8.3, "Computational Cost and Parallel Execution" (Tables 24 and 25), measured on one RTX 5070 (12 GB).
+Training time: LoRA fine-tuning dominates; the full five-view pipeline with LLaMA-3.2-1B costs 0.80 GPU-hours on Cora and 24.2 on ArXiv.
+GPU memory: 3.9 / 4.8 / 7.3 GB for LLaMA-3.2-1B / SmolLM2-1.7B / Gemma-2-2B, so everything runs on one 12 GB GPU.
+Storage: all views share one base model; each adds a 6.5-12 MB adapter (33-61 MB for five views).
+Inference: each text is encoded once per adapter (1.1 min on Cora, about 65 min on ArXiv); GNNs and the head are negligible.
+Because the runs are independent, they can run in parallel on one GPU: 1.41-2.02x faster on 24 GB and 1.41x on 12 GB (Table 25).
+We state the limitation openly: on ArXiv, 22-26 GPU-hours buy only about 0.3 points over uniform averaging (78.11 vs. 77.80),
+so fewer views are recommended for very large graphs (Table 15).
+
+
+Comment 5. The claim that DIVERGE reduces computational and API cost should be qualified, since avoiding external APIs does not necessarily mean lower local computation cost.
+
+Response:
+We fully agree and corrected the wording throughout. The abstract now says "without any external API calls, at the price of additional
+local GPU time", and the contributions, Section 7.8.4, Limitations and Conclusion state the same trade-off.
+We now report the two costs separately: the API cost of augmentation-based methods (Table 26, GPT-4o; about 400 USD per pass on ArXiv
+for TAPE and UltraTAG, lower bounds) and the local GPU cost of DIVERGE (Tables 24 and 25; 0.80-24 GPU-hours).
+DIVERGE does not claim lower total computation. Its advantages are no per-token API fee, no dependence on a commercial provider,
+and node text that never leaves the operator's infrastructure (Section 7.8.5). We also note that TAPE still fine-tunes language
+models and trains GNNs locally, so its API bill comes on top of local GPU time.
+
+
+Comment 6. The adaptive ensemble module should be described more rigorously, especially how the MLP is trained, which data split is used, and how overfitting to validation/test nodes is avoided.
+
+Response:
+We rewrote Section 5.4 and Section 6.4. All stages (LoRA, GNNs, ensemble heads) use one and the same split, so no test node enters
+any training objective. The heads are fitted with cross-entropy on the training-node logits (Eqs. (23), (26)); the validation nodes select
+the epoch and the hyperparameters (Table 17); the test nodes are used only once. In the analysis of Section 7.3 we use a stricter protocol:
+heads are fitted on one half of the validation nodes and selected on the other. There, an unconstrained stacking combiner overfits,
+while the softmax-constrained DIVERGE heads do not (Table 12). The weights are node-conditioned: an MLP maps each node's concatenated
+logits to softmax weights over models (Method 1), over models and classes (Method 2), or per class with a separate MLP (Method 3).
+Eqs. (24)-(29) now show the node index and MLP parameters explicitly.
+
+
+Comment 7. The ablation study should include fewer LoRA runs, random-seed-only LoRA variants, different backbone LLMs, and different GNN architectures to verify the source of the performance gain.
+
+Response:
+We added all four, each with four seeds (42-45):
+(a) Backbone LLMs (Section 7.5, Table 13): LLaMA-3.2-1B, SmolLM2-1.7B and Gemma-2-2B; in all 21 encoder-dataset pairs the best
+DIVERGE ensemble beats the best single view and uniform averaging. Sub-2B models keep the pipeline on one 12 GB GPU.
+(b) GNN architectures (Section 7.6, Table 14): GCN, GIN and GraphSAGE, each tuned on validation (Tables 17-20); DIVERGE works with all
+three, GraphSAGE is best on six datasets and GCN on Reddit (72.63%).
+(c) Fewer runs (Section 7.7, Table 15): with M = 2 the best ensemble is within 0.31 points of M = 5 on six datasets.
+(d) Seed-only variants (Section 7.2, Tables 6, 9, 10): the initialization adds significant diversity beyond the seed, multi-init ensembles
+are slightly better than seed-only ensembles of equal size (82.85% vs. 82.76%), and in the controlled experiment the initialization
+changes members more than the seed at every stage.
+
+
+Comment 8. The privacy-sensitive deployment claim is promising, but the paper should discuss local model security, data governance, and whether node texts can still leak through saved embeddings.
+
+Response:
+We added Section 7.8.5, "Privacy and Security Considerations" (Tables 27 and 28). Local deployment keeps node text away from external
+providers but is not a formal privacy guarantee: adapters can memorize text and embeddings can be inverted.
+Table 27 lists every artifact, what it can leak and the safeguard (access control, encryption, audit logs, checksummed safetensors
+weights, pinned libraries, offline execution); deleting a node also requires retraining the adapters and GNNs.
+We measured leakage with a keyword-inference probe on Cora and CiteSeer (four splits): AUC is 0.78-0.81 and 0.77-0.80 for LoRA
+embeddings vs. 0.58 for the label alone, i.e. clear leakage; fine-tuning lowers it relative to the base model (0.83, 0.82) but
+does not remove it. Gaussian noise with sigma = 2 still leaves AUC 0.71 / 0.68. We therefore advise not releasing embeddings,
+deleting them after GNN training, and leave differentially private training to future work (Sections 9 and 10).
+
+
+Comment 9. The method should be evaluated on larger and more realistic TAG datasets beyond citation-style benchmarks to demonstrate scalability and practical usefulness.
+
+Response:
+We added two non-citation datasets from LLMNodeBed: Reddit (social network, 33,434 users) and Computers (Amazon e-commerce, 87,229
+products, 628,274 edges). The evaluation now covers seven benchmarks from five domains, 2.7K-169K nodes (Section 6.1, Table 3).
+On Computers, DIVERGE is the most accurate method (90.88% vs. 90.41% for LLaGA; Table 4).
+On Reddit, DIVERGE with GraphSAGE has the best Macro-F1 (Table 5), but the 7B predictor LLaGA is more accurate (71.06% vs. 65.68%);
+with a GCN backbone DIVERGE reaches 72.63% and surpasses LLaGA with a 1B encoder (Table 14).
+Reddit is also the only dataset where fine-tuning does not help (Table 22), showing that the benefit is smaller when the text carries
+little of the label signal; we report this openly. The cost on the largest graph is given in Section 7.8.3.
+
+
+
+
+===============================================================
+Reviewer 2 - Initial submission, July 10
+This paper proposes DIVERGE, a framework that generates diverse node representations for text-attributed graphs by fine-tuning the same LLM with different LoRA initialization strategies. It further trains multiple GNNs on these representations and adaptively ensembles their predictions to improve node classification performance.
+
+
+The paper is well organized and clearly presented. Nevertheless, I have several concerns as follows:
+Comment 1)The paper assumes that different LoRA initializations lead to diverse and complementary representations, but the relationship between initialization diversity and representation diversity is not sufficiently justified.
+
+Response:
+We thank the reviewer; this is related to R1-C2. The new Section 7.2 follows the initialization through the whole pipeline.
+- Initialization to weights: LoRA learns only in the subspace chosen at the start; trained adapters of different initializations are
+  almost orthogonal (Table 6) and each strategy keeps a stable region of the weight spectrum (Table 7).
+- Weights to representations: Mantel tests show the differences propagate to LLM embeddings (rho = 0.57), GNN embeddings (0.59)
+  and predictions (0.53), all p < 0.001 (Table 8).
+- Initialization vs. seed: the initialization adds significant diversity beyond the seed (Table 6) and, in the controlled experiment,
+  is the larger source of diversity at every stage (Table 9, right).
+- Complementarity: the ensemble gain grows with the number of distinct initializations (Figure 3), and an oracle is 3.4-9.0 points
+  above uniform averaging (Table 11). We also note that the diversity is compressed by the shared graph (Sections 7.2 and 9).
+
+
+Comment 2) Could the authors compare the proposed multi-initialization strategy with an ensemble using the same LoRA initialization but different random seeds, to further analyze the impact of initialization diversity?
+
+Response:
+We added this control in three forms (Section 7.2.2; also requested by R4-C1).
+(1) Pool analysis (Table 9, left): init-only pairs differ more than seed-only pairs in weight space (ratio 1.56, p = 0.006) and in local
+neighbourhoods (k-NN ratios 1.11, 1.08); downstream the two effects are similar in this pool.
+(2) Seed-only ensembles (Table 10): at equal size and member error, multi-init ensembles are slightly better (82.85% vs. 82.76%).
+(3) Controlled experiment (Table 9, right; Cora and CiteSeer x Gemma-2-2B and LLaMA-3.2-1B): all members use the same split and members
+of one strategy start from the identical adapter, so seeds differ only in training randomness. All 24 init-only/seed-only ratios are
+above one (1.04-1.84). They are significant (crossed bootstrap) in weight space in every pool (p < 0.001), in most local-neighbourhood
+measures and for predictions on CiteSeer/Gemma (p = 0.048); for global CKA geometry they are not significant (p = 0.06-0.30).
+PERMANOVA attributes 35-61% of the variance to the initialization and only 5-20% to the seed.
+
+
+Comment 3)Could the authors include a single-LoRA-initialization baseline using the same LLM encoder and GNN architecture?
+
+Response:
+We thank the reviewer. Table 13 (Section 7.5) now reports, for each of the three LLM encoders, the five single-initialization baselines
+(one LoRA run + one GraphSAGE) with exactly the same LLM, GNN, hyperparameters, splits and seeds as DIVERGE, followed by uniform
+averaging and the three DIVERGE ensembles. In all 21 encoder-dataset pairs the best DIVERGE ensemble beats the best single view;
+e.g. with LLaMA-3.2-1B, 89.30% -> 89.94% on Cora and 63.57% -> 65.68% on Reddit. On PubMed, WikiCS and Computers the gain is small
+(about 0.1-0.2 points) because the best view is close to the ceiling. Two observations still favour several views: the best
+initialization varies across encoders and datasets and cannot be known in advance, and single initializations can fail
+(Orthogonal: 66.62% on Computers, 51.07% on Reddit), which the learned weights neutralize but uniform averaging does not.
+
+
+Comment 4)The proposed framework requires training multiple LLM adapters and GNN models, which may introduce significant computational overhead. The paper lacks detailed analysis of training time, memory consumption, and scalability compared with existing approaches.
+
+Response:
+We added Sections 7.8.3 (cost and parallel execution) and 7.8.4 (API cost); full numbers are in our response to R1-C4.
+Time and memory (Table 24): five views cost 0.80 GPU-hours on Cora to 24.2 on ArXiv; peak memory 3.9-7.3 GB; 6.5-12 MB per adapter.
+Scalability: cost grows linearly with nodes and views, but memory does not grow with graph size, so ArXiv runs on a 12 GB GPU.
+Parallel runs give 1.41-2.02x speed-up (Table 25), and two or three views already give most of the gain (Table 15).
+Comparison: TAPE/UltraTAG pay about 400 USD per GPT-4o pass on ArXiv (Table 26) on top of local training; GraphGPT/LLaGA need
+a 7B LLM that does not fit on our GPU; frozen-encoder STAGE is cheaper, and DIVERGE trades GPU time for +0.76 to +3.84 points
+over it. We state this trade-off openly (Sections 8.3 and 9).
+
+
+Comment 5)The proposed adaptive ensemble module introduces additional learnable parameters, but the paper does not provide sufficient analysis on how the learned weights behave or why they improve over simple averaging.
+
+Response:
+We added Section 7.3 (Tables 11 and 12), where all fusion rules use the same five GNNs and heads are fitted and selected on disjoint
+validation halves. (i) Views are complementary: an oracle is 3.4-9.0 points above averaging, but on balanced pools 84-89% of test
+nodes are unanimous and views contribute equally (Shapley 10.8-12.6 points), so learned weights match averaging there.
+(ii) The softmax constraint makes the extra parameters safe: unconstrained stacking overfits, while the class-level head
+(30-35 parameters) beats it in every setting (Wilcoxon p < 0.001). (iii) When one view is weak (collapsed Orthogonal on CiteSeer,
+Shapley -4.1), the class-level head improves over averaging by +1.59 points (p = 0.002) and beats the best single view.
+Hence the low-cost heads act as a safeguard against a failed view. Per-class errors are in Table 21 and Figure 4.
+
+
+Comment 6)The latest baselines considered in the experiments are from 2024. Therefore, the authors are encouraged to include more recent studies.
+
+Response:
+We thank the reviewer and added five recent methods to Tables 4 and 5, discussed in Sections 3.4, 3.5, 6.2 and 8.3: LLM-BP
+(Wang et al., 2025a), UltraTAG (Zhang et al., 2026), SKETCH (Zhou et al., 2025), STAGE (Zolnai-Lucas et al., 2024), the closest design
+to ours, and E-LLaGNN (Jaiswal et al., 2024). They cover the encoder and enhancer roles and were run under the same splits, seeds and
+LLM encoder as DIVERGE. DIVERGE is the most accurate on six of seven benchmarks and has the best Macro-F1 on all seven; STAGE is the
+closest competitor. On Reddit, LLaGA beats the GraphSAGE version of DIVERGE, but the GCN version is more accurate (72.63% vs. 71.06%).
+
+
+Comment 7)Equation (16) defines the node representation as the average of all token embeddings, but it is unclear whether the averaging operation considers only valid tokens or also includes padded positions.
+
+Response:
+We thank the reviewer. The average in Eq. (16) is taken only over valid tokens. Since texts are encoded in padded mini-batches, the
+tokenizer's attention mask (1 for real tokens, 0 for padding) weights the final-layer token embeddings, and the sum is divided by the
+number of valid tokens. Section 5.2 now defines the mask after Eq. (14) and gives Eq. (16) as a masked mean (in blue).
+This does not change any result, because the released code already applied this masking.
+
+
+
+
+===============================================================
+Reviewer 4 - Initial submission, August 30
+SUMMARY
+The paper proposes DIVERGE: one LLM (LLaMA-3.2-1B) is LoRA fine-tuned five times with different initialization strategies (Gaussian, Orthogonal, PiSSA, EVA, LoFTQ), each embedding set trains a GraphSAGE, and trainable ensemble heads fuse the five logit vectors. On five TAG benchmarks the authors report the best accuracy and Macro-F1 against baseline numbers taken from Wu et al. (2025). The topic fits IP&M, the experiments are broad, and code is released, but the central claims need stronger evidence before acceptance.
+
+
+COMMENTS
+Comment 1. Add a control ensemble trained with the same initialization but different seeds (e.g., five Gaussian runs); without it, the gains may reflect the well-known benefit of ensembling rather than initialization diversity, which is the paper's core claim.
+
+Response:
+We agree this control is essential (also R2-C2) and added it in Section 7.2.2 in three forms.
+(1) Seed-only ensembles of one initialization (each of the five, incl. Gaussian) with four seeds vs. four initializations with one seed
+(Table 10): at equal member error, multi-init ensembles are slightly better (82.85% vs. 82.76%; -0.61 vs. -1.00 pp to the best member).
+(2) Pool distances (Table 9, left): the initialization dominates in weight space (ratio 1.56) and local neighbourhoods.
+(3) Controlled experiment (Table 9, right): same split and identical initial adapter, so seeds differ only in training randomness.
+All 24 ratios are above one (geometric means 1.80 adapters, 1.25/1.27 embeddings, 1.18 predictions); significant in weight space in
+every pool and in most neighbourhood measures, not significant for global CKA. PERMANOVA: initialization 35-61% vs. seed 5-20%.
+So the gain is not only generic ensembling: different initializations give more diverse members than different seeds.
+
+
+Comment 2. Clarify the comparison protocol: Section 6.1 states that you drew your own single 60/20/20 split, yet treats baseline numbers from Wu et al. (2025) as like-for-like — document the exact split correspondence, report mean ± std over multiple seeds with significance tests, and ideally re-run TAPE in-house.
+
+Response:
+We agree and changed the protocol (details in R1-C3).
+- TAPE and all baselines whose LLM can be replaced were re-run in-house with our splits, seeds, GPU and LLaMA-3.2-1B (Tables 4, 5).
+- All methods use the same four seeds (42-45), each fixing one 60/20/20 split, so they share the same test nodes (Section 6.1, Table 3).
+  Only GraphGPT and LLaGA (7B LLMs) are taken from LLMNodeBed, as stated in Sections 6.1 and 7.
+- All tables report mean ± std over the four seeds (Tables 4, 5, 13, 14, 15).
+- Table 23 tests DIVERGE against the 14 baselines (two-proportion z-test, Holm over 70 pairs): it is significantly better than all 14 on
+  ArXiv, 12 on PubMed, 8 on WikiCS, 4 on Cora and 2 on CiteSeer; vs. TAPE the gain is significant on ArXiv (+2.09 pp).
+- Fine-tuning vs. base embeddings is tested with McNemar and Holm on all seven datasets (Table 22; see Comment 5).
+
+
+Comment 3. Specify which nodes' logits train the ensemble heads (train-set logits of already-trained GNNs risk leakage), and clarify whether the learned weights are global constants or node-conditioned MLP outputs (Eqs. 24–29 are ambiguous).
+
+Response:
+All stages use the same split, so test nodes never enter any training objective (Section 5.4). The heads are trained on the
+training-node logits (Eq. (23)); epoch and hyperparameters are selected on validation, and the test set is used once (Section 6.4).
+We agree that training-node logits can be over-confident; in the analysis of Section 7.3 the heads are therefore fitted on one half of
+the validation nodes and selected on the other, and they still match averaging on balanced pools and beat it by +1.59 pp when one view
+is weak (Table 12). The weights are node-conditioned: an MLP maps each node's logits to softmax weights over models (Method 1,
+Eq. (24)), over models and classes (Method 2, Eqs. (27)-(28)), or per class with a separate MLP (Method 3, Eq. (29)).
+Eqs. (24)-(29) now show the node index and MLP parameters explicitly (in purple, as R1-C6 raised the same point).
+
+
+Comment 4. Section 8.3 claims gains over LLM-BP, SKETCH, UltraTAG, and STAGE although none of them appears in Tables 5–6; either add these comparisons (STAGE would be the most informative) or rephrase the discussion as conceptual positioning only.
+
+Response:
+We chose the first option: STAGE, LLM-BP, UltraTAG, SKETCH and E-LLaGNN are now in Tables 4 and 5 (formerly Tables 5 and 6), run under
+the same splits, seeds and LLM encoder. Section 8.3 was rewritten so that every claim refers to these tables with its actual margin.
+DIVERGE beats STAGE on all seven benchmarks (+0.76 to +3.84) with higher Macro-F1 everywhere; we note that STAGE is cheaper, so this is
+the accuracy bought with extra GPU time. It also beats UltraTAG (+2.72 to +6.12), SKETCH (+3.63 to +7.99), E-LLaGNN (+2.93 to +6.78)
+and LLM-BP (+5.58 to +10.69), with a caveat that LLM-BP targets low-label settings. Section 8.1 now reports seven benchmarks, the TAPE
+margin (+0.32 to +2.19), and that LLaGA beats the GraphSAGE version on Reddit while the GCN version beats LLaGA.
+
+
+Comment 5. Correct the statistical reporting: Eq. (36) is uncorrected while Table 9's values are continuity-corrected, a multiple-comparison correction is needed (WikiCS p = 0.0181 fails Bonferroni at 0.0125), ArXiv's absence from Table 9 needs explanation, and DIVERGE should be tested against baselines rather than only fine-tuned vs. base embeddings.
+
+Response:
+All four points were valid and are corrected in Section 7.8.2 (McNemar table now Table 22).
+(1) Eq. (36) now uses Edwards' continuity correction, as in Table 22; the exact binomial test is used when b + c < 25.
+(2) p-values are Holm-adjusted over all comparisons; Bonferroni p-values and effect sizes are also reported. The test was recomputed so
+that adapter, GNNs and test share one split. Fine-tuning is significant on 5 of 7 datasets: Cora (+4.24 pp), PubMed (+4.67),
+WikiCS (+1.62; fails Bonferroni, as noted), ArXiv (+0.70) and Computers (+9.58); CiteSeer (+3.13) is not significant after correction,
+and on Reddit fine-tuning does not help (-1.27), since the label is weakly reflected in the text. Sections 8.1 and 10 were revised.
+(3) ArXiv was missing because its base-model embeddings had not been extracted; Table 22 now covers all seven datasets.
+(4) DIVERGE is tested against all 14 baselines in Table 23 (Holm over 70 pairs); see our response to Comment 2.
+
+
+Comment 6. Support the efficiency claim with a cost table (GPU-hours, wall-clock, peak memory vs. TAPE) and honestly discuss the marginal ensemble gains on ArXiv (77.89 vs. 77.69).
+
+Response:
+We added Sections 7.8.3 and 7.8.4 (details in R1-C4). Table 24 gives per-stage time, peak memory (3.9 GB for LLaMA-3.2-1B), adapter size
+and GPU-hours (0.80 on Cora to 24.2 on ArXiv); Table 25 gives wall-clock times, 1.41-2.02x faster with parallel runs on 24 GB.
+Versus TAPE: its API part costs about 5 USD on Cora and 398 USD on ArXiv per GPT-4o pass (Table 26), repeated whenever nodes or prompts
+change; its local part is of the same kind as DIVERGE's. We therefore do not claim lower GPU time, only no API cost.
+ArXiv: after re-running with four seeds, the learned ensemble adds about 0.3 points over averaging (78.11 vs. 77.80; Table 13) for
+22-26 GPU-hours. We state this openly (Sections 7.8.3 and 9) and recommend fewer views (Table 15) or parallel runs for large graphs;
+the main value of the learned weights is protection against a weak view (Section 7.3).

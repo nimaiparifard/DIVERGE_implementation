@@ -1,0 +1,16 @@
+{
+	"seed": 43,
+	"device": 1,
+	"dataset": "citeseer",
+	"gnn_model_name": "SAGE",
+	"llm_name": "llama_3.2_1B",
+	"hidden_dim": 256,
+	"num_layers": 3,
+	"dropout": 0.00,
+	"lr": 0.001,
+	"epochs": 200,
+	"early_stop": 20,
+	"batch_norm": 1,
+	"weight_decay": 0.01,
+	"re_split": 1
+}

@@ -1,0 +1,544 @@
+
+======================================================================
+                     GNN Training Results - PISSA                     
+======================================================================
+
+
+                        Final Results:
+                        • Test Accuracy: 88.9300 (8893.00%)
+                        • Test F1 (Macro): 86.2000
+                        • Test F1 (Weighted): 88.9000
+                        • Validation Accuracy: 89.3000 (8930.00%)
+                        • Validation F1 (Macro): 87.8900
+                        • Validation F1 (Weighted): 89.3300
+                        
+
+======================================================================
+                  GNN Training Results - ORTHOGONAL                   
+======================================================================
+
+
+                        Final Results:
+                        • Test Accuracy: 89.4800 (8948.00%)
+                        • Test F1 (Macro): 87.2100
+                        • Test F1 (Weighted): 89.3800
+                        • Validation Accuracy: 91.8800 (9188.00%)
+                        • Validation F1 (Macro): 90.8200
+                        • Validation F1 (Weighted): 91.9400
+                        
+
+======================================================================
+                     GNN Training Results - LOFTQ                     
+======================================================================
+
+
+                        Final Results:
+                        • Test Accuracy: 90.9600 (9096.00%)
+                        • Test F1 (Macro): 89.0700
+                        • Test F1 (Weighted): 90.8600
+                        • Validation Accuracy: 91.1400 (9114.00%)
+                        • Validation F1 (Macro): 89.6500
+                        • Validation F1 (Weighted): 91.1300
+                        
+
+======================================================================
+                      GNN Training Results - EVA                      
+======================================================================
+
+
+                        Final Results:
+                        • Test Accuracy: 92.0700 (9207.00%)
+                        • Test F1 (Macro): 90.5100
+                        • Test F1 (Weighted): 91.9800
+                        • Validation Accuracy: 91.1400 (9114.00%)
+                        • Validation F1 (Macro): 89.6700
+                        • Validation F1 (Weighted): 91.1000
+                        
+
+======================================================================
+                   GNN Training Results - GAUSSIAN                    
+======================================================================
+
+
+                        Final Results:
+                        • Test Accuracy: 91.1400 (9114.00%)
+                        • Test F1 (Macro): 89.2600
+                        • Test F1 (Weighted): 91.1700
+                        • Validation Accuracy: 92.4400 (9244.00%)
+                        • Validation F1 (Macro): 90.8800
+                        • Validation F1 (Weighted): 92.5000
+                        
+
+======================================================================
+               Best Similarity Threshold Search - PISSA               
+======================================================================
+
+
+Best Similarity Threshold Search Results:
+  • Best Threshold: 0.3400
+  • Best Test Accuracy: 88.7500 (8875.00%)
+  • Best Validation Accuracy: 90.0400 (9004.00%)
+  • Best Test F1 (Macro): 85.4800
+  • Best Test F1 (Weighted): 88.7100
+  • Best Validation F1 (Macro): 88.8600
+  • Best Validation F1 (Weighted): 90.0000
+
+Edge Removal Statistics:
+  • Total Edges Checked: 10858
+  • Edges Removed: 10
+  • Edges Kept: 10848
+  • Original Edges: 10858
+  • Modified Edges: 10848
+  • Edge Reduction: 0.09%
+
+
+======================================================================
+            Best Similarity Threshold Search - ORTHOGONAL             
+======================================================================
+
+
+Best Similarity Threshold Search Results:
+  • Best Threshold: 0.7000
+  • Best Test Accuracy: 89.8500 (8985.00%)
+  • Best Validation Accuracy: 92.6200 (9262.00%)
+  • Best Test F1 (Macro): 87.7900
+  • Best Test F1 (Weighted): 89.8400
+  • Best Validation F1 (Macro): 91.3600
+  • Best Validation F1 (Weighted): 92.6300
+
+Edge Removal Statistics:
+  • Total Edges Checked: 10858
+  • Edges Removed: 182
+  • Edges Kept: 10676
+  • Original Edges: 10858
+  • Modified Edges: 10676
+  • Edge Reduction: 1.68%
+
+
+======================================================================
+               Best Similarity Threshold Search - LOFTQ               
+======================================================================
+
+
+Best Similarity Threshold Search Results:
+  • Best Threshold: 0.1000
+  • Best Test Accuracy: 90.9600 (9096.00%)
+  • Best Validation Accuracy: 91.1400 (9114.00%)
+  • Best Test F1 (Macro): 89.0700
+  • Best Test F1 (Weighted): 90.8600
+  • Best Validation F1 (Macro): 89.6500
+  • Best Validation F1 (Weighted): 91.1300
+
+Edge Removal Statistics:
+  • Total Edges Checked: 10858
+  • Edges Removed: 0
+  • Edges Kept: 10858
+  • Original Edges: 10858
+  • Modified Edges: 10858
+  • Edge Reduction: 0.00%
+
+
+======================================================================
+                Best Similarity Threshold Search - EVA                
+======================================================================
+
+
+Best Similarity Threshold Search Results:
+  • Best Threshold: 0.5800
+  • Best Test Accuracy: 90.9600 (9096.00%)
+  • Best Validation Accuracy: 91.3300 (9133.00%)
+  • Best Test F1 (Macro): 88.9900
+  • Best Test F1 (Weighted): 90.9100
+  • Best Validation F1 (Macro): 90.4300
+  • Best Validation F1 (Weighted): 91.3000
+
+Edge Removal Statistics:
+  • Total Edges Checked: 10858
+  • Edges Removed: 398
+  • Edges Kept: 10460
+  • Original Edges: 10858
+  • Modified Edges: 10460
+  • Edge Reduction: 3.67%
+
+
+======================================================================
+             Best Similarity Threshold Search - GAUSSIAN              
+======================================================================
+
+
+Best Similarity Threshold Search Results:
+  • Best Threshold: 0.1000
+  • Best Test Accuracy: 91.1400 (9114.00%)
+  • Best Validation Accuracy: 92.4400 (9244.00%)
+  • Best Test F1 (Macro): 89.2600
+  • Best Test F1 (Weighted): 91.1700
+  • Best Validation F1 (Macro): 90.8800
+  • Best Validation F1 (Weighted): 92.5000
+
+Edge Removal Statistics:
+  • Total Edges Checked: 10858
+  • Edges Removed: 0
+  • Edges Kept: 10858
+  • Original Edges: 10858
+  • Modified Edges: 10858
+  • Edge Reduction: 0.00%
+
+
+======================================================================
+Ensemble Hyperparameter Tuning - DIVERGE with Cosine Similarity Enhancer
+======================================================================
+
+
+Ensemble Hyperparameter Tuning Results:
+
+Best Hyperparameters:
+  • Number of Layers: 2
+  • Hidden Dimension: 256
+  • Dropout: 0.3
+  • Learning Rate: 0.01
+
+Best Performance Metrics:
+  • Test Accuracy: 92.6200 (9262.00%)
+  • Test Macro-F1: 90.7000
+  • Test Weighted-F1: 92.6000
+  • Validation Accuracy: 89.3000 (8930.00%)
+  • Validation Macro-F1: 87.7900
+  • Validation Weighted-F1: 89.1900
+  • Train Accuracy: 99.8200 (9982.00%)
+  • Train Macro-F1: 99.7000
+  • Train Weighted-F1: 99.8200
+
+Hyperparameter Search Space:
+  • Number of Layers: [2, 3]
+  • Hidden Dimensions: [64, 128, 256]
+  • Dropout Options: [0.3, 0.5]
+  • Learning Rates: [0.001, 0.01, 0.0001]
+  • Total Combinations Tested: 36
+
+
+======================================================================
+             Comprehensive GNN Mistakes Analysis - PISSA              
+======================================================================
+
+
+Mistake Analysis:
+  • Total Mistakes: 31
+  • Test Accuracy: 94.28%
+  • Test Nodes: 542
+  
+Mistakes by Split:
+  • Train: 96
+  • Validation: 33
+  • Test: 31
+
+Mistakes by Class:
+  • Class 0: 0/35 (0.00%)
+  • Class 1: 7/168 (4.17%)
+  • Class 2: 5/68 (7.35%)
+  • Class 3: 1/80 (1.25%)
+  • Class 4: 11/65 (16.92%)
+  • Class 5: 2/46 (4.35%)
+  • Class 6: 5/80 (6.25%)
+
+
+======================================================================
+           Comprehensive GNN Mistakes Analysis - ORTHOGONAL           
+======================================================================
+
+
+Mistake Analysis:
+  • Total Mistakes: 40
+  • Test Accuracy: 92.62%
+  • Test Nodes: 542
+  
+Mistakes by Split:
+  • Train: 123
+  • Validation: 41
+  • Test: 40
+
+Mistakes by Class:
+  • Class 0: 1/35 (2.86%)
+  • Class 1: 19/168 (11.31%)
+  • Class 2: 4/68 (5.88%)
+  • Class 3: 1/80 (1.25%)
+  • Class 4: 9/65 (13.85%)
+  • Class 5: 2/46 (4.35%)
+  • Class 6: 4/80 (5.00%)
+
+
+======================================================================
+             Comprehensive GNN Mistakes Analysis - LOFTQ              
+======================================================================
+
+
+Mistake Analysis:
+  • Total Mistakes: 22
+  • Test Accuracy: 95.94%
+  • Test Nodes: 542
+  
+Mistakes by Split:
+  • Train: 74
+  • Validation: 31
+  • Test: 22
+
+Mistakes by Class:
+  • Class 0: 1/35 (2.86%)
+  • Class 1: 4/168 (2.38%)
+  • Class 2: 5/68 (7.35%)
+  • Class 3: 0/80 (0.00%)
+  • Class 4: 3/65 (4.62%)
+  • Class 5: 1/46 (2.17%)
+  • Class 6: 8/80 (10.00%)
+
+
+======================================================================
+              Comprehensive GNN Mistakes Analysis - EVA               
+======================================================================
+
+
+Mistake Analysis:
+  • Total Mistakes: 23
+  • Test Accuracy: 95.76%
+  • Test Nodes: 542
+  
+Mistakes by Split:
+  • Train: 79
+  • Validation: 31
+  • Test: 23
+
+Mistakes by Class:
+  • Class 0: 1/35 (2.86%)
+  • Class 1: 4/168 (2.38%)
+  • Class 2: 5/68 (7.35%)
+  • Class 3: 0/80 (0.00%)
+  • Class 4: 4/65 (6.15%)
+  • Class 5: 2/46 (4.35%)
+  • Class 6: 7/80 (8.75%)
+
+
+======================================================================
+            Comprehensive GNN Mistakes Analysis - GAUSSIAN            
+======================================================================
+
+
+Mistake Analysis:
+  • Total Mistakes: 33
+  • Test Accuracy: 93.91%
+  • Test Nodes: 542
+  
+Mistakes by Split:
+  • Train: 111
+  • Validation: 37
+  • Test: 33
+
+Mistakes by Class:
+  • Class 0: 0/35 (0.00%)
+  • Class 1: 6/168 (3.57%)
+  • Class 2: 9/68 (13.24%)
+  • Class 3: 1/80 (1.25%)
+  • Class 4: 13/65 (20.00%)
+  • Class 5: 2/46 (4.35%)
+  • Class 6: 2/80 (2.50%)
+
+
+======================================================================
+                   Ensemble Model Mistakes Analysis                   
+======================================================================
+
+
+Ensemble Model Mistake Analysis:
+  • Total Mistakes: 19
+  • Test Accuracy: 96.49%
+  • Test Nodes: 542
+
+
+======================================================================
+       Best Ensemble Model - Final Results with Visualizations        
+======================================================================
+
+Retrained with best hyperparameters for 200 epochs
+Weight Approach: learnable_per_classes
+
+Final Results:
+  Train - Acc: 99.6900, Macro-F1: 99.6900
+  Val   - Acc: 89.4800, Macro-F1: 87.7700
+  Test  - Acc: 92.0700, Macro-F1: 90.2300
+
+Visualizations saved to: results/gnn_mistakes_comprehensive\cora_best_ensemble_tuned
+
+======================================================================
+     DIVERGE WITH COSINE SIMILARITY ENHANCER - EXPERIMENT CONFIG      
+======================================================================
+
+Dataset: cora
+LLM: llama_3.2_1B
+PEFT Type: lora
+Ensemble Approach: learnable
+Embeddings: retrained with GNN mistakes
+Supervised: True
+Edge evaluation scope: all edges
+Saved hyperparameters: C:\Users\Nima\Desktop\Python Project\DIVERGE\cosine_similarity_enhancer\best_hyperparamters\cora.json
+
+
+======================================================================
+            STAGE 1: BASELINE GNN RESULTS (ORIGINAL GRAPH)            
+======================================================================
+
+
+PISSA:
+  Test Accuracy: 88.9300
+  Test F1 (Macro): 86.2000
+  Test F1 (Weighted): 88.9000
+  Val Accuracy: 89.3000
+  Val F1 (Macro): 87.8900
+
+ORTHOGONAL:
+  Test Accuracy: 89.4800
+  Test F1 (Macro): 87.2100
+  Test F1 (Weighted): 89.3800
+  Val Accuracy: 91.8800
+  Val F1 (Macro): 90.8200
+
+LOFTQ:
+  Test Accuracy: 90.9600
+  Test F1 (Macro): 89.0700
+  Test F1 (Weighted): 90.8600
+  Val Accuracy: 91.1400
+  Val F1 (Macro): 89.6500
+
+EVA:
+  Test Accuracy: 92.0700
+  Test F1 (Macro): 90.5100
+  Test F1 (Weighted): 91.9800
+  Val Accuracy: 91.1400
+  Val F1 (Macro): 89.6700
+
+GAUSSIAN:
+  Test Accuracy: 91.1400
+  Test F1 (Macro): 89.2600
+  Test F1 (Weighted): 91.1700
+  Val Accuracy: 92.4400
+  Val F1 (Macro): 90.8800
+
+======================================================================
+     STAGE 2: COSINE SIMILARITY ENHANCER RESULTS (REFINED GRAPH)      
+======================================================================
+
+
+PISSA:
+  Best Similarity Threshold: 0.3400
+  Original Test Acc: 88.9300
+  Refined Test Acc: 88.7500
+  Test Acc Improvement: -0.1800
+  Original Test F1: 86.2000
+  Refined Test F1: 85.4800
+  Test F1 Improvement: -0.7200
+  Val Accuracy: 90.0400
+  Val F1 (Macro): 88.8600
+
+ORTHOGONAL:
+  Best Similarity Threshold: 0.7000
+  Original Test Acc: 89.4800
+  Refined Test Acc: 89.8500
+  Test Acc Improvement: +0.3700
+  Original Test F1: 87.2100
+  Refined Test F1: 87.7900
+  Test F1 Improvement: +0.5800
+  Val Accuracy: 92.6200
+  Val F1 (Macro): 91.3600
+
+LOFTQ:
+  Best Similarity Threshold: 0.1000
+  Original Test Acc: 90.9600
+  Refined Test Acc: 90.9600
+  Test Acc Improvement: +0.0000
+  Original Test F1: 89.0700
+  Refined Test F1: 89.0700
+  Test F1 Improvement: +0.0000
+  Val Accuracy: 91.1400
+  Val F1 (Macro): 89.6500
+
+EVA:
+  Best Similarity Threshold: 0.5800
+  Original Test Acc: 92.0700
+  Refined Test Acc: 90.9600
+  Test Acc Improvement: -1.1100
+  Original Test F1: 90.5100
+  Refined Test F1: 88.9900
+  Test F1 Improvement: -1.5200
+  Val Accuracy: 91.3300
+  Val F1 (Macro): 90.4300
+
+GAUSSIAN:
+  Best Similarity Threshold: 0.1000
+  Original Test Acc: 91.1400
+  Refined Test Acc: 91.1400
+  Test Acc Improvement: +0.0000
+  Original Test F1: 89.2600
+  Refined Test F1: 89.2600
+  Test F1 Improvement: +0.0000
+  Val Accuracy: 92.4400
+  Val F1 (Macro): 90.8800
+
+======================================================================
+              STAGE 3: ENSEMBLE RESULTS (REFINED GRAPHS)              
+======================================================================
+
+Best Ensemble Hyperparameters: {'num_layers': 2, 'hidden_dim': 256, 'dropout': 0.3, 'learning_rate': 0.01}
+
+Test Results:
+  Test Accuracy: 92.6200
+  Test F1 (Macro): 90.7000
+  Test F1 (Weighted): 92.6000
+
+Validation Results:
+  Val Accuracy: 89.3000
+  Val F1 (Macro): 87.7900
+
+======================================================================
+      STAGE 4: HOMOPHILY / STRUCTURAL METRICS (BEFORE VS. AFTER)      
+======================================================================
+
+Mean delta homophily: -0.0002
+Mean edges removed: 1.09%
+Mean delta test accuracy: -0.1840
+
+
+PISSA:
+  Homophily: 0.8138 -> 0.8102 (delta -0.0036)
+  Cosine ESNR: 0.2739 -> 0.2732
+  Retained/removed cosine sim: 0.7609 / 0.2987
+  Edges removed: 0.09%
+  Baseline vs refined test acc: 88.9300 -> 88.7500 (delta -0.1800)
+
+ORTHOGONAL:
+  Homophily: 0.8138 -> 0.8165 (delta +0.0027)
+  Cosine ESNR: 0.3757 -> 0.3677
+  Retained/removed cosine sim: 0.8979 / 0.6451
+  Edges removed: 1.68%
+  Baseline vs refined test acc: 89.4800 -> 89.8500 (delta +0.3700)
+
+LOFTQ:
+  Homophily: 0.8138 -> 0.8100 (delta -0.0038)
+  Cosine ESNR: 0.4093 -> 0.4052
+  Retained/removed cosine sim: 0.7857 / nan
+  Edges removed: 0.00%
+  Baseline vs refined test acc: 90.9600 -> 90.9600 (delta +0.0000)
+
+EVA:
+  Homophily: 0.8138 -> 0.8215 (delta +0.0077)
+  Cosine ESNR: 0.4346 -> 0.4310
+  Retained/removed cosine sim: 0.8054 / 0.5209
+  Edges removed: 3.67%
+  Baseline vs refined test acc: 92.0700 -> 90.9600 (delta -1.1100)
+
+GAUSSIAN:
+  Homophily: 0.8138 -> 0.8100 (delta -0.0038)
+  Cosine ESNR: 0.3995 -> 0.3963
+  Retained/removed cosine sim: 0.8860 / nan
+  Edges removed: 0.00%
+  Baseline vs refined test acc: 91.1400 -> 91.1400 (delta +0.0000)
+
+Metrics CSV: C:\Users\Nima\Desktop\Python Project\DIVERGE\cosine_similarity_enhancer\experiment_results\homophily_structural_cora_20260709_210643\homophily_structural_metrics_cora.csv
+Summary CSV: C:\Users\Nima\Desktop\Python Project\DIVERGE\cosine_similarity_enhancer\experiment_results\homophily_structural_cora_20260709_210643\homophily_structural_summary_cora.csv
+Figures dir: C:\Users\Nima\Desktop\Python Project\DIVERGE\cosine_similarity_enhancer\experiment_results\homophily_structural_cora_20260709_210643\figures

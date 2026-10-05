@@ -1,0 +1,56 @@
+{
+    "0": [
+      "Intelligent Agents",
+      "Multi-Agent Systems",
+      "Mobile Agents",
+      "Software Agents",
+      "Agent Architectures",
+      "Agent Architectures",
+      "Agent Protocols"
+    ],
+    "1": [
+      "Machine Learning",
+      "Supervised Learning",
+      "Unsupervised Learning",
+      "Data Mining",
+      "Statistical Learning",
+      "Probabilistic Learning",
+      "Deep Learning",
+      "Reinforcement Learning"
+    ],
+    "2": [
+      "Information Retrieval",
+      "Document Ranking",
+      "Retrieval Models",
+      "Search Engines",
+      "Text Processing",
+      "Text Indexing",
+      "Evaluation of Retrieval Systems"
+    ],
+    "3": [
+      "Databases",
+      "Query Processing",
+      "Query Optimization",
+      "Database Management Systems",
+      "Transaction Management",
+      "Transaction Concurrency",
+      "Data Models"
+    ],
+    "4": [
+      "Human-Computer Interaction",
+      "User Interface Design",
+      "User Studies",
+      "Interaction Techniques",
+      "Human Factors",
+      "Cognitive Models",
+      "Computer-Supported Cooperative Work"
+    ],
+    "5": [
+      "Artificial Intelligence",
+      "Knowledge Representation",
+      "Automated Reasoning",
+      "Search Algorithms",
+      "Expert Systems",
+      "Commonsense & Symbolic AI"
+    ]
+  }

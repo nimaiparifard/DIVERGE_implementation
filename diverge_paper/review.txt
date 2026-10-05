@@ -1,0 +1,547 @@
+
+
+
+
+
+
+
+
+===============================================================
+
+Reviewer 1 - Initial submission, June 21
+
+The paper presents DIVERGE, a representation-aware text-attributed graph encoding framework that generates diverse node representations through multiple LoRA initializations of a local LLM and combines the resulting GNN outputs using adaptive ensemble learning. The topic is relevant to Information Processing & Management, especially for LLM-enhanced graph representation learning and text-attributed graph mining. However, the current manuscript is not yet mature for publication, mainly because the methodological novelty is limited, the experimental comparison is not sufficiently rigorous, and the claimed advantages over augmentation-based LLM-GNN methods are not fully validated. Therefore, I recommend rejection in its current form, with encouragement to resubmit after substantial methodological clarification and more comprehensive experiments.
+
+
+
+
+
+Comment 1. The novelty of DIVERGE should be clarified more strongly, since using multiple LoRA initializations and ensemble learning is intuitive and close to standard model ensembling.
+
+
+
+
+
+Response:
+
+
+
+
+
+idea to Response:
+
+- Do not claim novelty as "ensembling" alone; reframe as representation-level diversity from structured LoRA init geometries (Gaussian, Orthogonal, PiSSA, EVA, LoFTQ) on one local LLM, without text-aug / API prompts.
+
+- Add a short novelty-vs-related-work table: API-LLM pipelines vs prompt/text augmentation vs multi-seed ensemble vs DIVERGE (init-induced multi-view embeddings + adaptive fusion).
+
+- Emphasize: diversity is induced at the embedding stage before the GNN, not only at prediction averaging.
+
+
+
+
+
+Comment 2. The paper should explain why different LoRA initialization strategies necessarily produce meaningful and complementary semantic views rather than merely random training variance.
+
+
+
+
+
+Response:
+
+
+
+
+
+idea to Response:
+
+- Best experiment: representation analysis — pairwise cosine / CKA between the 5 embedding sets; prediction disagreement across GNNs; optional t-SNE/PCA by init.
+
+- Compare diversity of multi-init vs same-init different-seed runs (show multi-init >> seed variance).
+
+- Optional: error complementarity (nodes one view gets right, another gets wrong); short intuition that PiSSA/EVA/LoFTQ explore different subspaces than Gaussian/Orthogonal.
+
+
+
+
+
+Comment 3. The comparison with existing LLM-GNN methods should be made fairer, as many baseline results appear to be borrowed from prior studies rather than reimplemented under the same hardware, split, encoder, and tuning protocol.
+
+
+
+
+
+Response:
+
+
+
+
+
+idea to Response:
+
+- Re-run at least TAPE (and 1–2 strong LLM-GNN baselines) on YOUR 60/20/20 split, same protocol where possible.
+
+- For numbers kept from Wu et al., explicitly document split mismatch; report mean ± std over ≥3–5 seeds.
+
+- Ideally add significance tests so comparisons are not single-split point estimates.
+
+
+
+
+
+Comment 4. The computational cost is likely high because the method fine-tunes the LLM multiple times, and the authors should report 
+training time, GPU memory, inference cost, and total parameter/storage overhead.
+
+Response:
+
+
+
+
+
+idea to Response:
+
+- Add one efficiency table: LoRA train time ×K, GNN train, ensemble train, peak VRAM, adapter storage size, inference latency.
+
+- Break down by dataset if ArXiv differs a lot; include total GPU-hours for full DIVERGE pipeline.
+
+
+
+
+
+Comment 5. The claim that DIVERGE reduces computational and API cost should be qualified, since avoiding external APIs does not necessarily mean lower local computation cost.
+
+
+
+
+
+Response:
+
+
+
+
+
+idea to Response:
+
+- Soften wording: "no external API / privacy-friendly local deployment," not "universally cheaper."
+
+- Compare dollar-equivalent of API methods vs your GPU-hours; admit local cost > single-LoRA; argue privacy + no API dependency as the real benefit.
+
+
+
+
+
+Comment 6. The adaptive ensemble module should be described more rigorously, especially how the MLP is trained, which data split is used, and how overfitting to validation/test nodes is avoided.
+
+
+
+
+
+
+
+
+
+Response:
+
+
+
+
+
+idea to Response:
+
+- Write a clear protocol: train GNNs on train; train ensemble MLP only on train (or train+val with early stop on val); never train on test logits.
+
+- Clarify Eqs. 24–29: global scalar weights vs node-conditioned MLP (inputs = concat of 5 logits?).
+
+- Ablation: learned adaptive ensemble vs mean / max / majority vote.
+
+
+
+
+
+Comment 7. The ablation study should include fewer LoRA runs, random-seed-only LoRA variants, different backbone LLMs, and different GNN architectures to verify the source of the performance gain.
+
+
+
+
+
+Response:
+
+
+
+
+
+idea to Response:
+
+- Bundle one ablation block: (a) K=1,2,3,5 LoRA runs; (b) seed-only ensemble (same init, different seeds); (c) another LLM backbone; (d) GCN/GAT vs GraphSAGE.
+
+- This single block also answers R2-C2/C3 and R4-C1 — highest-priority experiment package.
+
+
+
+
+
+Comment 8. The privacy-sensitive deployment claim is promising, but the paper should discuss local model security, data governance, and whether node texts can still leak through saved embeddings.
+
+
+
+
+
+
+
+
+
+Response:
+
+
+
+
+
+idea to Response:
+
+- Short discussion (no new method required): weights stay local; embeddings can still leak text (membership/inversion risk).
+
+- Mitigations: do not publish raw embeddings; encrypt at rest; access control; DP / safer release as future work.
+
+
+
+
+
+Comemnt 9. The method should be evaluated on larger and more realistic TAG datasets beyond citation-style benchmarks to demonstrate scalability and practical usefulness.
+
+
+
+
+
+Response:
+
+
+
+
+
+idea to Response:
+
+- Add ≥1 non-citation / more realistic TAG if feasible (product, social, larger industrial-style graph).
+
+- If full new dataset is hard: ArXiv scaling curve (10%/25%/50%/100% nodes) + memory/time to show practical scalability.
+
+
+
+
+
+===============================================================
+
+Reviewer 2 - Initial submission, July 10
+
+This paper proposes DIVERGE, a framework that generates diverse node representations for text-attributed graphs by fine-tuning the same LLM with different LoRA initialization strategies. It further trains multiple GNNs on these representations and adaptively ensembles their predictions to improve node classification performance.
+
+
+
+
+
+The paper is well organized and clearly presented. Nevertheless, I have several concerns as follows:
+
+Comment 1)The paper assumes that different LoRA initializations lead to diverse and complementary representations, but the relationship between initialization diversity and representation diversity is not sufficiently justified.
+
+
+
+
+
+Response:
+
+
+
+
+
+idea to Response:
+
+- Same as R1-C2: quantify embedding diversity (CKA/cosine) + GNN prediction disagreement; add short theory/intuition on why structured inits yield different subspaces.
+
+
+
+
+
+Comment 2) Could the authors compare the proposed multi-initialization strategy with an ensemble using the same LoRA initialization but different random seeds, to further analyze the impact of initialization diversity?
+
+
+
+
+
+Response:
+
+
+
+
+
+idea to Response:
+
+- CRITICAL experiment: 5× same init (e.g. Gaussian) different seeds + same ensemble vs DIVERGE’s 5 strategies under equal budget.
+
+- If DIVERGE wins → core claim holds; if not → must reframe novelty (honestly).
+
+
+
+
+
+Comment 3)Could the authors include a single-LoRA-initialization baseline using the same LLM encoder and GNN architecture?
+
+
+
+
+
+Response:
+
+
+
+
+
+idea to Response:
+
+- Report best single init, average of singles, and full DIVERGE (same LLM + GNN).
+
+- Shows gains come from multi-view fusion, not only from a strong encoder.
+
+
+
+
+
+Comment 4)The proposed framework requires training multiple LLM adapters and GNN models, which may introduce significant computational overhead. The paper lacks detailed analysis of training time, memory consumption, and scalability compared with existing approaches.
+
+
+
+
+
+
+
+
+
+Response:
+
+
+
+
+
+idea to Response:
+
+- Cost table (same as R1-C4) vs TAPE / single-LoRA.
+
+- Optional Pareto: accuracy vs #LoRA (K=1→5) so users can choose cheaper K=2–3.
+
+
+
+
+
+Comment 5)The proposed adaptive ensemble module introduces additional learnable parameters, but the paper does not provide sufficient analysis on how the learned weights behave or why they improve over simple averaging.
+
+
+
+
+
+Response:
+
+
+
+
+
+idea to Response:
+
+- Table/plot of learned ensemble weights per dataset; compare adaptive vs uniform average.
+
+- Show weights adapt when one view is weak; link to why MLP helps over simple averaging.
+
+
+
+
+
+Comment 6)The latest baselines considered in the experiments are from 2024. Therefore, the authors are encouraged to include more recent studies.
+
+
+
+
+
+
+
+
+
+Response:
+
+
+
+
+
+idea to Response:
+
+- Add 1–2 recent (2025) TAG/LLM-GNN methods; STAGE is most informative if available.
+
+- Even one strong in-house re-run beats relying only on borrowed tables.
+
+
+
+
+
+Comment 7)Equation (16) defines the node representation as the average of all token embeddings, but it is unclear whether the averaging operation considers only valid tokens or also includes padded positions.
+
+
+
+
+
+Response:
+
+
+
+
+
+idea to Response:
+
+- Clarify in text: mean over non-pad tokens only (attention mask); give the masked-average formula.
+
+- If you currently include pads, fix and re-report main numbers; if already masked, one clear sentence + formula is enough.
+
+
+
+
+
+===============================================================
+
+Reviewer 4 - Initial submission, August 30
+
+SUMMARY
+
+The paper proposes DIVERGE: one LLM (LLaMA-3.2-1B) is LoRA fine-tuned five times with different initialization strategies (Gaussian, Orthogonal, PiSSA, EVA, LoFTQ), each embedding set trains a GraphSAGE, and trainable ensemble heads fuse the five logit vectors. On five TAG benchmarks the authors report the best accuracy and Macro-F1 against baseline numbers taken from Wu et al. (2025). The topic fits IP&M, the experiments are broad, and code is released, but the central claims need stronger evidence before acceptance.
+
+
+
+
+
+COMMENTS
+
+Comment 1. Add a control ensemble trained with the same initialization but different seeds (e.g., five Gaussian runs); without it, the gains may reflect the well-known benefit of ensembling rather than initialization diversity, which is the paper's core claim.
+
+
+
+
+
+Response:
+
+
+
+
+
+idea to Response:
+
+- Same critical control as R2-C2: 5× Gaussian (or Orthogonal) different seeds + ensemble vs multi-init DIVERGE. Make this Figure 1 of the rebuttal.
+
+
+
+
+
+Comment 2. Clarify the comparison protocol: Section 6.1 states that you drew your own single 60/20/20 split, yet treats baseline numbers from Wu et al. (2025) as like-for-like — document the exact split correspondence, report mean ± std over multiple seeds with significance tests, and ideally re-run TAPE in-house.
+
+
+
+
+
+Response:
+
+
+
+
+
+idea to Response:
+
+- Document split IDs/seed; which baselines share Wu’s split vs yours.
+
+- Report mean ± std + significance; ideally re-run TAPE on your split.
+
+
+
+
+
+Comment 3. Specify which nodes' logits train the ensemble heads (train-set logits of already-trained GNNs risk leakage), and clarify whether the learned weights are global constants or node-conditioned MLP outputs (Eqs. 24–29 are ambiguous).
+
+
+
+
+
+Response:
+
+
+
+
+
+idea to Response:
+
+- Explicit train/val/test flow for ensemble (no test leakage); small diagram helps.
+
+- Resolve ambiguity: global constants vs node-conditioned MLP; state exact inputs to the head.
+
+
+
+
+
+Comment 4. Section 8.3 claims gains over LLM-BP, SKETCH, UltraTAG, and STAGE although none of them appears in Tables 5–6; either add these comparisons (STAGE would be the most informative) or rephrase the discussion as conceptual positioning only.
+
+
+
+
+
+
+
+
+
+Response:
+
+
+
+
+
+idea to Response:
+
+- Prefer: add STAGE (and preferably LLM-BP/SKETCH/UltraTAG) on ≥2 datasets into tables.
+
+- Or rewrite §8.3 as related-work positioning only — no "outperforms X" without a table row.
+
+
+
+
+
+Comment 5. Correct the statistical reporting: Eq. (36) is uncorrected while Table 9's values are continuity-corrected, a multiple-comparison correction is needed (WikiCS p = 0.0181 fails Bonferroni at 0.0125), ArXiv's absence from Table 9 needs explanation, and DIVERGE should be tested against baselines rather than only fine-tuned vs. base embeddings.
+
+
+
+
+
+
+
+
+
+Response:
+
+
+
+
+
+idea to Response:
+
+- Align Eq. (36) with Table 9 (continuity correction); apply Bonferroni/FDR; explain why ArXiv is missing from Table 9.
+
+- Run tests vs main baselines, not only FT vs base; handle WikiCS Bonferroni fail honestly or re-test with proper correction.
+
+
+
+
+
+Comment 6. Support the efficiency claim with a cost table (GPU-hours, wall-clock, peak memory vs. TAPE) and honestly discuss the marginal ensemble gains on ArXiv (77.89 vs. 77.69).
+
+
+
+Response:
+
+
+
+
+
+idea to Response:
+
+- Cost table vs TAPE (GPU-hours, wall-clock, peak memory).
+
+- For ArXiv small gain: discuss saturation / already-strong single view; highlight where multi-init still helps (other datasets, hard classes, Macro-F1).
+

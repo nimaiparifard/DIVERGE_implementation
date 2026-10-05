@@ -1,0 +1,80 @@
+{
+    "seed": 42,
+    "device": 1,
+    "dataset": "computer",
+    "gnn_model_name": "GCN",
+    "llm_name": "smollm2_1.7B",
+    "epochs": 200,
+    "early_stop": 20,
+    "re_split": 1,
+    "lr": 0.001,
+    "hidden_dim": 512,
+    "num_layers": 3,
+    "dropout": 0.5,
+    "weight_decay": 0.0,
+    "batch_norm": 1,
+    "tuning": {
+        "init_weight_approach": "eva",
+        "peft_type": "lora",
+        "embedding_cache": "artifacts\\cache\\smollm2_1.7B_computer_seqcls_lora_init-eva_pool-mean_seed42_semi_supervised.pt",
+        "trial_log": "results\\gnn_tuning\\computer_smollm2_1.7B_GCN_supervised_seed42_init-eva\\trials.jsonl",
+        "search_space": {
+            "learning_rate": [
+                0.01,
+                0.005,
+                0.001,
+                0.0001
+            ],
+            "hidden_dim": [
+                128,
+                256,
+                512,
+                1024
+            ],
+            "num_layers": [
+                2,
+                3
+            ],
+            "dropout": [
+                0.0,
+                0.1,
+                0.01,
+                0.5
+            ],
+            "weight_decay": [
+                0.0,
+                0.01
+            ],
+            "batch_norm": [
+                0,
+                1
+            ]
+        },
+        "val_acc": 90.70333333333333,
+        "val_acc_std": 0.018856180831644212,
+        "test_acc": 90.81333333333333,
+        "test_acc_std": 0.02054804667656224,
+        "val_f1": 87.58999999999999,
+        "test_f1": 88.15333333333335,
+        "val_acc_per_seed": [
+            90.69,
+            90.73,
+            90.69
+        ],
+        "test_acc_per_seed": [
+            90.79,
+            90.84,
+            90.81
+        ],
+        "eval_seeds": [
+            42,
+            1042,
+            2042
+        ],
+        "n_candidates": 512,
+        "n_promoted": 16,
+        "search": "random",
+        "total_time_sec": 2357.2,
+        "timestamp": "2026-10-03 21:07:58"
+    }
+}

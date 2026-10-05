@@ -1,0 +1,65 @@
+{
+    "before_edge_editing": {
+        "results": {
+            "train": {
+                "accuracy": 98.58,
+                "macro_f1": 98.3,
+                "weighted_f1": 98.58
+            },
+            "val": {
+                "accuracy": 90.41,
+                "macro_f1": 88.5,
+                "weighted_f1": 90.33
+            },
+            "test": {
+                "accuracy": 93.17,
+                "macro_f1": 91.85,
+                "weighted_f1": 93.14
+            }
+        },
+        "hyperparams": {
+            "num_layers": 2,
+            "hidden_dim": 128,
+            "dropout": 0.3,
+            "learning_rate": 0.001
+        }
+    },
+    "after_edge_editing": {
+        "results": {
+            "train": {
+                "accuracy": 99.01,
+                "macro_f1": 98.87,
+                "weighted_f1": 99.01
+            },
+            "val": {
+                "accuracy": 88.93,
+                "macro_f1": 86.71,
+                "weighted_f1": 88.83
+            },
+            "test": {
+                "accuracy": 92.44,
+                "macro_f1": 90.95,
+                "weighted_f1": 92.42
+            }
+        },
+        "hyperparams": {
+            "num_layers": 3,
+            "hidden_dim": 128,
+            "dropout": 0.5,
+            "learning_rate": 0.01
+        }
+    },
+    "improvements": {
+        "test_acc_change": -0.730000000000004,
+        "test_f1_change": -0.8999999999999915,
+        "val_acc_change": -1.4799999999999898,
+        "val_f1_change": -1.7900000000000063
+    },
+    "edge_removal_stats": {
+        "strategy": "high_uncertainty",
+        "top_k_ratio": 0.1,
+        "original_edges": 10556,
+        "removed_edges": 1055,
+        "remaining_edges": 9584
+    }
+}

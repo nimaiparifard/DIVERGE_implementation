@@ -1,0 +1,80 @@
+{
+    "seed": 43,
+    "device": 1,
+    "dataset": "cora",
+    "gnn_model_name": "GIN",
+    "llm_name": "smollm2_1.7B",
+    "epochs": 200,
+    "early_stop": 20,
+    "re_split": 1,
+    "lr": 0.01,
+    "hidden_dim": 128,
+    "num_layers": 2,
+    "dropout": 0.01,
+    "weight_decay": 0.0,
+    "batch_norm": 1,
+    "tuning": {
+        "init_weight_approach": "eva",
+        "peft_type": "lora",
+        "embedding_cache": "artifacts\\cache\\smollm2_1.7B_cora_seqcls_lora_init-eva_pool-mean_seed43_semi_supervised.pt",
+        "trial_log": "results\\gnn_tuning\\cora_smollm2_1.7B_GIN_supervised_seed43_init-eva\\trials.jsonl",
+        "search_space": {
+            "learning_rate": [
+                0.01,
+                0.005,
+                0.001,
+                0.0001
+            ],
+            "hidden_dim": [
+                128,
+                256,
+                512,
+                1024
+            ],
+            "num_layers": [
+                2,
+                3
+            ],
+            "dropout": [
+                0.0,
+                0.1,
+                0.01,
+                0.5
+            ],
+            "weight_decay": [
+                0.0,
+                0.01
+            ],
+            "batch_norm": [
+                0,
+                1
+            ]
+        },
+        "val_acc": 88.5,
+        "val_acc_std": 0.08485281374238891,
+        "test_acc": 84.01333333333334,
+        "test_acc_std": 0.7115398013385377,
+        "val_f1": 87.19333333333334,
+        "test_f1": 82.55,
+        "val_acc_per_seed": [
+            88.56,
+            88.38,
+            88.56
+        ],
+        "test_acc_per_seed": [
+            84.69,
+            84.32,
+            83.03
+        ],
+        "eval_seeds": [
+            43,
+            1043,
+            2043
+        ],
+        "n_candidates": 512,
+        "n_promoted": 16,
+        "search": "random",
+        "total_time_sec": 464.2,
+        "timestamp": "2026-09-30 05:15:44"
+    }
+}

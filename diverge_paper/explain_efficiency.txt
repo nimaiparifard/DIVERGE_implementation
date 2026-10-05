@@ -1,0 +1,16 @@
+
+i have got these comments from ipm reviwers. for computaional heavy issues for DIVERGE apporches. 
+rev1 Comment 4. The computational cost is likely high because the method fine-tunes the LLM multiple times, and the authors should report training time, GPU memory, inference cost, and total parameter/storage overhead.
+rev2 Comment 4)The proposed framework requires training multiple LLM adapters and GNN models, which may introduce significant computational overhead. The paper lacks detailed analysis of training time, memory consumption, and scalability compared with existing approaches.
+Comment 6. Support the efficiency claim with a cost table (GPU-hours, wall-clock, peak memory vs. TAPE) and honestly discuss the marginal ensemble gains on ArXiv (77.89 vs. 77.69).
+
+# bring the table for coumputational costs for 4 step of diverge llm fine tuning , caching, gnn training , ensemble.
+# if does number are not prepared for this wirte code to estimate cost 
+# report for pissa not others and also report three llm model
+
+
+# to justify comutational heavy cost we developed new code that says we choose llm less than 2b to run fintuing and extracting caches and also gnn training parrarely 
+# also bring table if do not use parrely that cost and spend 5 time but with this apporches we save time 
+
+does not bring too much text explain shrotly this. 
+bring it this part in abliation study.

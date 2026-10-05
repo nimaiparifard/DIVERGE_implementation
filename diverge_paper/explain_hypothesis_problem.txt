@@ -1,0 +1,109 @@
+rev3 comment 5 Correct the statistical reporting: Eq. (36) is uncorrected while Table 9's values are continuity-corrected, a multiple-comparison correction is needed (WikiCS p = 0.0181 fails Bonferroni at 0.0125), ArXiv's absence from Table 9 needs explanation, and DIVERGE should be tested against baselines rather than only fine-tuned vs. base embeddings.
+can you exlain simply what is this comment what is the problem?
+
+=====================================================================
+SIMPLE EXPLANATION
+(full technical version with fixes, code and LaTeX:
+ explain_finetuned_hypothesis.txt)
+=====================================================================
+
+Background: what Table 9 does
+-----------------------------
+Table 9 uses McNemar's test to answer one question:
+"Is the GNN better when it uses the FINE-TUNED LLaMA embeddings than when
+it uses the BASE (not fine-tuned) LLaMA embeddings?"
+
+McNemar looks at the same test nodes for both models and counts only the
+nodes where they disagree:
+  b = nodes the base model gets right but the fine-tuned model gets wrong
+  c = nodes the fine-tuned model gets right but the base model gets wrong
+If c is much bigger than b, fine-tuning really helps (it's not luck).
+
+The reviewer found 4 separate problems with this part of the paper.
+
+
+Problem 1 - The formula in the paper is not the one we used
+-----------------------------------------------------------
+Eq. (36) in the paper says:      chi^2 = (b - c)^2 / (b + c)
+But the code (statsmodels, correction=True) actually computed:
+                                 chi^2 = (|b - c| - 1)^2 / (b + c)
+The "-1" is called the continuity correction. So the numbers in Table 9
+do not come from the formula written above them. Anyone who recomputes
+them from Eq. (36) gets different numbers.
+
+  -> It's a write-up mistake, not a wrong result. Fix: change the formula
+     in the paper to the corrected one. The table stays as it is (the
+     corrected version is the safer, more conservative one).
+
+
+Problem 2 - We ran 4 tests but treated each one as if it were alone
+-------------------------------------------------------------------
+Each test uses the 5% (p < 0.05) threshold. With 4 tests, the chance
+that at least one looks "significant" just by luck is about 18.5%, not 5%.
+To fix this, the threshold has to be made stricter. The simplest rule
+(Bonferroni) divides by the number of tests: 0.05 / 4 = 0.0125.
+
+  Cora      p = 1.9e-9   < 0.0125  -> still significant
+  PubMed    p = 4.6e-38  < 0.0125  -> still significant
+  CiteSeer  p = 9.7e-5   < 0.0125  -> still significant
+  WikiCS    p = 0.0181   > 0.0125  -> NOT significant under Bonferroni
+
+So the paper's claim "fine-tuning significantly helps on all datasets" is
+not fully supported for WikiCS.
+
+  -> Fix: apply a multiple-comparison correction. Holm-Bonferroni controls
+     the same error rate and is less strict; WikiCS passes it (0.0181 <
+     0.05 in the last Holm step). Report BOTH Bonferroni and Holm openly,
+     and say the WikiCS evidence is weaker (its gain is only +1.37 pp).
+     Do not hide that it fails plain Bonferroni.
+
+
+Problem 3 - ArXiv is missing from Table 9
+-----------------------------------------
+Every other table has 5 datasets (Cora, CiteSeer, PubMed, WikiCS, ArXiv),
+but Table 9 only has 4. The reviewer wants to know why. Missing a dataset
+without a reason looks like we dropped one that gave a bad result.
+(The real reason: the base-model embeddings for ArXiv were never
+extracted, so the test could not run.)
+
+  -> Fix: extract the base LLaMA embeddings for ArXiv (one forward pass,
+     no training), train the GNN on them, and add ArXiv to Table 9.
+
+
+Problem 4 - The test checks a side claim, not the main claim (MOST IMPORTANT)
+-----------------------------------------------------------------------------
+Table 9 only shows "fine-tuning the LLM helps" (fine-tuned vs base
+embeddings). But the main claim of the paper is
+"DIVERGE is better than other methods (TAPE, ENGINE, LLaGA, ...)".
+That main claim has NO statistical test at all - we just show higher
+numbers in Tables 5-6. The reviewer asks: is DIVERGE's improvement over
+the baselines real, or could it be noise?
+
+  -> Fix:
+     (a) For methods we run ourselves on the same split (base embeddings,
+         best single LoRA view, simple average of views, seed-only
+         ensemble, TAPE re-run): McNemar test DIVERGE vs each one, with
+         Holm correction.
+     (b) For baselines copied from Wu et al. (2025) we have no per-node
+         predictions, so McNemar is impossible. Instead run DIVERGE with
+         several seeds and compare mean +/- std with their reported
+         mean +/- std (Welch's t-test).
+     Where DIVERGE is not significantly better (e.g. ArXiv 77.89 vs 77.69)
+     write "comparable", not "outperforms".
+
+
+In one sentence
+---------------
+The formula in the paper doesn't match the table, the p-values were not
+corrected for running several tests (so WikiCS is borderline), ArXiv is
+missing without explanation, and the paper's main claim (DIVERGE beats the
+baselines) was never statistically tested - only the side claim that
+fine-tuning helps.
+
+Effort: problems 1-3 are cheap (text edits + one extra ArXiv run).
+Problem 4 needs new experiments and is the one that matters most for
+acceptance.
+
+
+can you design experiment and run for this.
+do not run again use cache existed in the artifact/cache 

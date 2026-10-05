@@ -1,0 +1,16 @@
+{
+	"seed": 50,
+	"device": 1,
+	"dataset": "arxiv",
+	"gnn_model_name": "SAGE",
+	"llm_name": "llama_3.2_1B",
+	"hidden_dim": 128,
+	"num_layers": 2,
+	"dropout": 0.1,
+	"lr": 0.01,
+	"epochs": 200,
+	"early_stop": 20,
+	"batch_norm": 1,
+	"weight_decay": 0.00,
+	"re_split": 1
+}

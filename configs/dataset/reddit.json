@@ -1,0 +1,9 @@
+{
+    "name": "reddit",
+    "seed": 42,
+    "llm_responses_name": "gpt_4o",
+    "enhance_features_name": "TA",
+    "max_length": 512,
+    "num_samples": 33434,
+    "num_classes": 2
+}

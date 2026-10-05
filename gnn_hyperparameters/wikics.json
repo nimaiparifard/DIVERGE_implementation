@@ -1,0 +1,16 @@
+{
+	"seed": 45,
+	"device": 1,
+	"dataset": "wikics",
+	"gnn_model_name": "SAGE",
+	"llm_name": "llama_3.2_1B",
+	"hidden_dim": 256,
+	"num_layers": 3,
+	"dropout": 0.1,
+	"lr": 0.0001,
+	"epochs": 200,
+	"early_stop": 20,
+	"batch_norm": 1,
+	"weight_decay": 0.0,
+	"re_split": 1
+}

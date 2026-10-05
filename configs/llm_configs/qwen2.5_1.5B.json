@@ -1,0 +1,23 @@
+{
+    "llm": {
+        "model_name": "qwen2.5_1.5B",
+        "hf_repo_id": "Qwen/Qwen2.5-1.5B",
+        "local_files_only": true,
+        "trust_remote_code": true,
+        "architecture": "decoder",
+        "use_4bit": false,
+        "torch_dtype": "bfloat16",
+        "ft_target_modules": ["q_proj", "k_proj", "v_proj", "o_proj"],
+        "module_to_save": ["score"],
+        "caching_batch_size": 16
+    },
+    "tokenizer": {
+        "model_name": "qwen2.5_1.5B",
+        "local_files_only": true,
+        "trust_remote_code": true,
+        "max_length": 512,
+        "padding_side": "left",
+        "padding": true,
+        "truncation": true
+    }
+}

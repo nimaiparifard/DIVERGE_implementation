@@ -1,0 +1,15 @@
+{
+    "dataset": "wikics",
+    "llm_name": "llama_3.2_1B",
+    "peft_type": "lora",
+    "supervised": true,
+    "use_all_nodes": true,
+    "retrained_with_gnn_mistakes": true,
+    "similarity_thresholds": {
+        "PISSA": 0.1,
+        "ORTHOGONAL": 0.6400000000000001,
+        "LOFTQ": 0.44000000000000006,
+        "EVA": 0.16000000000000003,
+        "GAUSSIAN": 0.1
+    }
+}

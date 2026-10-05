@@ -1,0 +1,80 @@
+{
+    "seed": 45,
+    "device": 1,
+    "dataset": "cora",
+    "gnn_model_name": "GIN",
+    "llm_name": "smollm2_1.7B",
+    "epochs": 200,
+    "early_stop": 20,
+    "re_split": 1,
+    "lr": 0.005,
+    "hidden_dim": 256,
+    "num_layers": 2,
+    "dropout": 0.5,
+    "weight_decay": 0.0,
+    "batch_norm": 1,
+    "tuning": {
+        "init_weight_approach": "eva",
+        "peft_type": "lora",
+        "embedding_cache": "artifacts\\cache\\smollm2_1.7B_cora_seqcls_lora_init-eva_pool-mean_seed45_semi_supervised.pt",
+        "trial_log": "results\\gnn_tuning\\cora_smollm2_1.7B_GIN_supervised_seed45_init-eva\\trials.jsonl",
+        "search_space": {
+            "learning_rate": [
+                0.01,
+                0.005,
+                0.001,
+                0.0001
+            ],
+            "hidden_dim": [
+                128,
+                256,
+                512,
+                1024
+            ],
+            "num_layers": [
+                2,
+                3
+            ],
+            "dropout": [
+                0.0,
+                0.1,
+                0.01,
+                0.5
+            ],
+            "weight_decay": [
+                0.0,
+                0.01
+            ],
+            "batch_norm": [
+                0,
+                1
+            ]
+        },
+        "val_acc": 87.45333333333333,
+        "val_acc_std": 0.1510702559149973,
+        "test_acc": 87.27,
+        "test_acc_std": 0.68954091007472,
+        "val_f1": 86.37666666666667,
+        "test_f1": 85.46,
+        "val_acc_per_seed": [
+            87.27,
+            87.64,
+            87.45
+        ],
+        "test_acc_per_seed": [
+            86.35,
+            88.01,
+            87.45
+        ],
+        "eval_seeds": [
+            45,
+            1045,
+            2045
+        ],
+        "n_candidates": 512,
+        "n_promoted": 16,
+        "search": "random",
+        "total_time_sec": 176.8,
+        "timestamp": "2026-09-30 06:27:32"
+    }
+}

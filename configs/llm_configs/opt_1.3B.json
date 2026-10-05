@@ -1,0 +1,23 @@
+{
+    "llm": {
+        "model_name": "opt_1.3B",
+        "hf_repo_id": "facebook/opt-1.3b",
+        "local_files_only": true,
+        "trust_remote_code": true,
+        "architecture": "decoder",
+        "use_4bit": true,
+        "torch_dtype": "bfloat16",
+        "ft_target_modules": ["q_proj", "k_proj", "v_proj", "out_proj"],
+        "module_to_save": ["score"],
+        "caching_batch_size": 8
+    },
+    "tokenizer": {
+        "model_name": "opt_1.3B",
+        "local_files_only": true,
+        "trust_remote_code": true,
+        "max_length": 512,
+        "padding_side": "left",
+        "padding": true,
+        "truncation": true
+    }
+}

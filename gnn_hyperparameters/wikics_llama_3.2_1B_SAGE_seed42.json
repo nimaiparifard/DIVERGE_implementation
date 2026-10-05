@@ -1,0 +1,80 @@
+{
+    "seed": 42,
+    "device": 1,
+    "dataset": "wikics",
+    "gnn_model_name": "SAGE",
+    "llm_name": "llama_3.2_1B",
+    "epochs": 200,
+    "early_stop": 20,
+    "re_split": 1,
+    "lr": 0.0001,
+    "hidden_dim": 512,
+    "num_layers": 3,
+    "dropout": 0.1,
+    "weight_decay": 0.01,
+    "batch_norm": 1,
+    "tuning": {
+        "init_weight_approach": "eva",
+        "peft_type": "lora",
+        "embedding_cache": "artifacts\\cache\\llama_3.2_1B_wikics_seqcls_lora_init-eva_pool-mean_seed42_semi_supervised.pt",
+        "trial_log": "results\\gnn_tuning\\wikics_llama_3.2_1B_SAGE_supervised_seed42_init-eva\\trials.jsonl",
+        "search_space": {
+            "learning_rate": [
+                0.01,
+                0.005,
+                0.001,
+                0.0001
+            ],
+            "hidden_dim": [
+                128,
+                256,
+                512,
+                1024
+            ],
+            "num_layers": [
+                2,
+                3
+            ],
+            "dropout": [
+                0.0,
+                0.1,
+                0.01,
+                0.5
+            ],
+            "weight_decay": [
+                0.0,
+                0.01
+            ],
+            "batch_norm": [
+                0,
+                1
+            ]
+        },
+        "val_acc": 87.87666666666667,
+        "val_acc_std": 0.08653836657164518,
+        "test_acc": 88.28333333333335,
+        "test_acc_std": 0.19223827807061547,
+        "val_f1": 86.34666666666668,
+        "test_f1": 87.31,
+        "val_acc_per_seed": [
+            87.86,
+            87.99,
+            87.78
+        ],
+        "test_acc_per_seed": [
+            88.51,
+            88.3,
+            88.04
+        ],
+        "eval_seeds": [
+            42,
+            1042,
+            2042
+        ],
+        "n_candidates": 512,
+        "n_promoted": 16,
+        "search": "random",
+        "total_time_sec": 2799.8,
+        "timestamp": "2026-09-30 02:27:22"
+    }
+}

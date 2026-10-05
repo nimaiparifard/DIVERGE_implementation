@@ -1,0 +1,214 @@
+Reviewer 1 - Comment 5
+======================
+
+"The claim that DIVERGE reduces computational and API cost should be qualified, since avoiding
+external APIs does not necessarily mean lower local computation cost."
+
+
+1. Is the reviewer right?
+-------------------------
+
+Partly, and we should say so.
+
+The paper currently claims "reducing computational AND API cost" in:
+  - Abstract (template.tex line ~118)
+  - Contribution 2 (template.tex line ~171)
+  - Section 3 / Preliminaries (template.tex line ~266)
+  - Conclusion
+
+- API cost: clearly true. DIVERGE makes zero API calls.
+- Computational cost: not guaranteed. DIVERGE fine-tunes a 1B LLM K=5 times and trains 5 GNNs,
+  so it costs more to run locally than a single LoRA or a frozen encoder.
+
+
+2. The idea: compare with API-based methods and their cost
+----------------------------------------------------------
+
+Comparing API cost is a good idea, but it only covers half the comment. If we show only dollars,
+the reviewer will say we ignored the point. Compare BOTH kinds of cost side by side:
+
+| Cost dimension             | TAPE (API-based)                  | Single LoRA | DIVERGE (K=5)               |
+|----------------------------|-----------------------------------|-------------|-----------------------------|
+| API calls / $ per dataset  | N nodes x tokens x price          | 0           | 0                           |
+| Node text sent off-site    | Yes                               | No          | No                          |
+| Local LM fine-tuning       | Yes (~3 runs: orig/expl/pred text)| 1 run       | 5 runs                      |
+| GPU-hours (train)          | measure                           | measure     | measure                     |
+| Peak VRAM                  | measure                           | measure     | measure                     |
+| Inference per new node     | 1 API call + LM passes            | 1 pass      | 5 passes (or batched LoRA)  |
+| Accuracy                   | ...                               | ...         | ...                         |
+
+Points to make with this table:
+
+ 1. TAPE is not API-only. It also fine-tunes local LMs (on original, explanation and prediction
+    text), so its total cost = API fees + local compute. The fair comparison is total cost vs
+    total cost, not DIVERGE's compute vs TAPE's API bill alone.
+
+ 2. Estimate API cost from tokens per dataset:
+      cost = #nodes x (avg input tokens + prompt tokens + generated explanation tokens) x price
+    Do this for 2-3 models (e.g. a cheap one and a GPT-4-class one) and state the pricing date.
+
+ 3. Convert our GPU-hours to dollars so both methods share one unit:
+      - electricity: RTX 5070 ~250 W x hours x $/kWh, and/or
+      - equivalent cloud GPU hourly rate.
+
+ 4. Use the consumer-GPU hardware as a strength: everything runs on a 12 GB RTX 5070
+    (template.tex line ~618), no datacenter GPU needed.
+
+ 5. Scaling differs:
+      - API cost grows with every new or re-processed node, is recurring, and depends on rate
+        limits and provider pricing changes.
+      - DIVERGE's cost is mostly one-off training; afterwards inference is local.
+
+ 6. Give readers a cheaper option: the K ablation (K = 1, 2, 3, 5), also requested by R1-C7 and
+    R2-C4, shows an accuracy-vs-cost trade-off, so users can pick K = 2-3.
+
+ 7. Verify the "$125 for ~130k nodes" figure (template.tex line ~266) against the TAPE paper
+    before relying on it in the rebuttal.
+
+The same measured cost table also answers R1-C4, R2-C4 and R4-C6, so one experiment covers four
+comments.
+
+
+3. Draft response
+-----------------
+
+Response:
+
+We thank the reviewer for this important point and agree that the original wording was too
+strong. Avoiding external APIs removes per-node monetary fees and off-site data transfer, but it
+does not by itself imply lower local computation; indeed, DIVERGE requires more local GPU
+computation than a single-LoRA encoder because it trains K adapters and K GNNs.
+
+We have made two revisions.
+
+(1) Wording. Throughout the Abstract, Introduction (Contribution 2), Section 3, and Conclusion, we
+replaced "reducing computational and API cost" with "eliminating external API fees and
+third-party data transfer, at the cost of additional local GPU computation, which we quantify in
+Section X."
+
+(2) Quantitative analysis. We added Section X.X ("Cost analysis"), which compares DIVERGE, a
+single-LoRA baseline, and TAPE on (i) estimated API cost per dataset based on token counts and
+current provider pricing, (ii) training GPU-hours, wall-clock time, and peak VRAM measured on the
+same RTX 5070 GPU, (iii) per-node inference cost, and (iv) a dollar-equivalent total cost. We note
+that TAPE also fine-tunes local language models in addition to its API calls. The results show
+that [DIVERGE's total cost is lower than / comparable to TAPE's on N of 5 datasets, while
+DIVERGE's local compute is ~K x a single LoRA]. We further report accuracy as a function of the
+number of LoRA runs (K = 1, 2, 3, 5), so practitioners can choose a cheaper configuration. We now
+present DIVERGE's main practical advantage as API independence and on-premises deployability,
+rather than universally lower computation.
+
+
+Note:
+- Fill in the bracketed parts only after measuring the numbers.
+- If DIVERGE's total cost turns out higher than TAPE's on some dataset, say that plainly and lean
+  on the privacy / no-API-dependency argument. Reviewers accept that far more readily than a cost
+  claim they can't verify.
+
+
+4. DONE: API cost simulation for augmentation-based methods (GPT-4o)
+---------------------------------------------------------------------
+
+Code:    experiments/api_simulator_calculator.py
+Run:     python -m experiments.api_simulator_calculator   (from repo root, ~few minutes)
+Output:  results/api_cost/api_cost.json, results/api_cost/api_cost_table_rows.tex
+Paper:   template.tex, "Analysis of API Cost" (sec:api_cost), Table tab:api_cost, in \revone{}
+
+4.1 How each method uses the LLM API (what is simulated)
+
+  TAPE (He et al., ICLR 2024)
+    - 1 query per node (ALL nodes): node text + "which category + explain" prompt.
+    - Output: ranked prediction list + explanation.
+    - Prompts: common/prompt.py EXPLANATION_PROMPTS.
+    - Output length: MEASURED from our stored GPT-4o explanations (datasets/gpt_4o/*.json):
+      Cora 120, CiteSeer 139, WikiCS 121, ArXiv 166 tokens; PubMed has no GPT-4o file ->
+      pooled mean 136.
+
+  UltraTAG (paper uses Llama-3-8B-Instruct via API for all LLM steps)
+    - Text augmentation: 1 query per node (ALL nodes). Prompt = own text + up to 5 neighbour
+      texts (text propagation) -> JSON {summary, keywords, soft_label}.
+    - Edge reconfiguration: 1 query per edge between "important" nodes
+      (top 10% of training nodes by PageRank) -> {"confidence": x}.
+    - Prompts: taken directly from ULTRATAG/text_augmentation.py and structure_augmentation.py.
+    - Output length: MEASURED from ULTRATAG/cache (Cora): ~58 tokens.
+
+  E-LLaGNN (Jaiswal et al., 2024, "All Against Some")
+    - Queries only a BUDGET of nodes ("on-demand"); prompt catalog (their Table 2) asks for a
+      "detailed explanation ... in less than 1000 words" of title + abstract.
+    - Budget: best reported settings = 25% of nodes (Cora/PubMed, their Table 5) and
+      10,000 nodes on ArXiv (their Table 6). Node selection = text-length heuristic (theirs).
+    - They used Vicuna-7B / LLaMA-2-7B locally; we price the same queries with GPT-4o.
+    - Output length: TAPE's measured GPT-4o explanation length used as proxy.
+
+  DIVERGE: 0 API calls.
+
+  Pricing: GPT-4o 2.50 USD / 1M input, 10.00 USD / 1M output (Batch API = half), checked
+  2026-09-28 on the OpenAI pricing page.
+
+4.2 Result (GPT-4o standard, USD, one augmentation pass)
+
+| Method         | Cora | CiteSeer | PubMed | WikiCS |  ArXiv |  Total |
+|----------------|------|----------|--------|--------|--------|--------|
+| TAPE           | 4.96 |   6.64   | 53.05  | 32.35  | 398.31 | 495.32 |
+| UltraTAG       | 3.98 |   4.38   | 30.23  | 31.13  | 403.25 | 472.98 |
+| E-LLaGNN       | 1.04 |   1.52   | 10.44  |  4.84  |  20.92 |  38.76 |
+| DIVERGE (ours) |  0   |    0     |   0    |   0    |   0    |   0    |
+
+API calls: TAPE 2,708 / 3,186 / 19,717 / 11,701 / 169,343
+           UltraTAG 2,870 / 3,400 / 23,009 / 32,862 / 268,051
+           E-LLaGNN 677 / 796 / 4,929 / 2,925 / 10,000
+
+4.3 Sanity checks (the numbers are trustworthy)
+  1. Same formula with TAPE's own numbers (GPT-3.5, 285 in / 164 out tokens, 169,343 nodes)
+     gives 127.94 USD; TAPE paper Appendix B reports ~128 USD.
+     Our GPT-4o input count on ArXiv = 278 tokens/node, close to TAPE's 285.
+  2. PubMed: our input-token estimate (537/node) vs the real GPT-3.5 usage logs in
+     datasets/PubMed/*.json (463/node) -> ours is ~16% higher, because this repo's PubMed
+     prompt is longer than TAPE's original. So PubMed TAPE may be slightly overestimated;
+     all other assumptions (no retries, one pass, E-LLaGNN counted once not per epoch) make
+     the table a LOWER bound overall.
+
+4.4 Also fixed in template.tex (Section 3, line ~266)
+  The paper said "approximately 130 thousand nodes exceeded 125 US dollars". TAPE Appendix B
+  actually says ogbn-arxiv = 169,343 nodes, ~128 USD with GPT-3.5. Corrected, and added the
+  GPT-4o figure (~400 USD).
+
+4.5 Paragraph added to the paper (short version, explains the table)
+  Table X estimates the GPT-4o cost of the augmentation step of TAPE, UltraTAG and E-LLaGNN
+  from real token counts; the procedure reproduces TAPE's own 128 USD on ArXiv. Cost grows
+  linearly with graph size (about 400 USD per pass on ArXiv for TAPE and UltraTAG) and recurs
+  when nodes are added or prompts change. DIVERGE makes no API calls and uses only native
+  text, yet achieves the best accuracy and Macro-F1 on all five benchmarks (e.g. 93.36% vs
+  90.05% for TAPE on Cora). Avoiding API fees does not mean lower computation: DIVERGE spends
+  local GPU time instead, reported in the efficiency section.
+
+  -> The last sentence is what directly answers Comment 5. The efficiency section
+     (sec:efficiency) is still EMPTY: fill it with GPU-hours / peak VRAM, otherwise the
+     reference points to nothing.
+
+
+5. Updated response to Comment 5 (with real numbers)
+----------------------------------------------------
+
+Response:
+
+We thank the reviewer for this important point and agree that the original wording was too
+strong. Avoiding external APIs removes per-node monetary fees and the transfer of node text to
+third parties, but it does not by itself imply lower local computation; DIVERGE requires more
+local GPU computation than a single fine-tuned encoder, because it trains K LoRA adapters and K
+GNNs.
+
+We made the following revisions. (1) We added Section X.X ("Analysis of API Cost") with Table X,
+which estimates the GPT-4o cost of the augmentation step of three augmentation-based methods
+(TAPE, UltraTAG and E-LLaGNN) on all five benchmarks, using exact token counts of the real node
+texts and prompts and output lengths measured from stored GPT-4o generations. The procedure
+reproduces the 128 USD reported by the TAPE authors for ogbn-arxiv with GPT-3.5. A single
+augmentation pass costs up to about 400 USD on ArXiv (TAPE and UltraTAG), and about 39 USD over
+the five datasets even for E-LLaGNN, which augments only a subset of nodes; these costs recur
+whenever the graph grows or the prompts change. DIVERGE makes no API calls and still achieves the
+best accuracy and Macro-F1 on all five benchmarks. (2) We report the local computation of DIVERGE
+(GPU-hours, peak memory) in Section X.X, and (3) we revised the Abstract, Introduction and
+Conclusion so that DIVERGE is described as eliminating API fees and third-party data transfer at
+the cost of additional local GPU computation, rather than as universally cheaper.
+
+Before sending: (2) and (3) are NOT done yet -- fill the efficiency section and change the
+wording in the Abstract (line ~118), Contribution 2 (line ~171) and Conclusion.

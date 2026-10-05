@@ -1,0 +1,811 @@
+ADAPTIVE-ENSEMBLE EXPERIMENTS FOR THE IPM REVISION
+How the learned weights behave, and whether they beat simple averaging
+=====================================================================
+
+Contents
+  0. What the reviewer comments actually ask
+  1. READ THIS FIRST: the selection-on-test problem
+  2. Shared design (views, runs, protocols, fusion rules)
+  3. Experiment 1  - exp1_disagreement_stratified.py
+  4. Experiment 2  - exp2_weak_view_injection.py
+  5. Experiment 3  - exp3_fusion_baselines.py
+  6. Experiment 4  - exp4_stability_significance.py
+  7. Experiment 5  - exp5_node_level_routing.py
+  8. Experiment 6  - exp6_per_class_weights.py
+  9. Experiment 7  - exp7_logit_scale_calibration.py
+ 10. Experiment 8  - exp8_label_efficiency.py
+ 11. Experiment 9  - exp9_view_contribution.py
+ 12. Overall verdict: how far do the results answer the reviewers?
+ 13. What to put in the paper, and which claims to change
+ 14. Draft response to the reviewers
+ 15. Work to finish before resubmission
+
+All numbers below come from the runs in results/ensemble_experiments/
+(Cora, LLaMA-3.2-1B, LoRA seed 40, supervised 60/20/20 split, GraphSAGE,
+5 views = PiSSA, Orthogonal, Gaussian, LoftQ, EVA).
+Unless stated otherwise: 4 GNN seeds (42-45) x 3 fusion seeds (0-2) = 12 runs.
+Exp4 uses 5 x 5 = 25 runs. Most reports are from PROTOCOL=paper, TUNE=1
+(file names *_paper_tuned_report.txt). Exp2 under paper/tuned was interrupted
+(exit code -1073741510 = 0xC000013A = console closed / Ctrl+C), so the Exp2
+numbers are from the earlier val_split, untuned run.
+
+
+---------------------------------------------------------------------
+0. WHAT THE REVIEWER COMMENTS ACTUALLY ASK
+---------------------------------------------------------------------
+
+R2-C5 (the main target): "The adaptive ensemble module introduces
+additional learnable parameters, but the paper does not provide sufficient
+analysis on how the learned weights behave or why they improve over simple
+averaging."
+  This contains three separate questions:
+  (a) BEHAVIOUR: what do the learned weights look like? Are they stable?
+      Do they react to view quality? Are they per class / per node?
+  (b) COST: what do the extra parameters buy? Is it worth them?
+  (c) WHY: what is the mechanism that makes learned weights better than
+      uniform averaging? This question ASSUMES that they are better.
+      The experiments must first check that assumption under a clean
+      protocol.
+
+The same experiments also touch:
+  R1-C6: how is the MLP trained, which split, how is overfitting to
+         validation/test nodes avoided?  -> protocol (Section 1, Exp3, Exp8)
+  R4-C3: which nodes' logits train the head (train-set logits risk
+         leakage)? Global constants or node-conditioned?  -> Section 1, Exp5
+  R4-C5: statistical reporting, multiple-comparison correction  -> Exp4
+  R1-C2 / R2-C1: complementary views  -> Exp1 (oracle), Exp6, Exp9
+  R4-C6: honest discussion of marginal ensemble gains  -> Exp1, Exp3
+
+
+---------------------------------------------------------------------
+1. READ THIS FIRST: THE SELECTION-ON-TEST PROBLEM
+---------------------------------------------------------------------
+
+This is the most important result of the whole package, so it comes
+before the individual experiments.
+
+1.1 What the paper code does
+  ensemble/ensemble_gnns_learning.py (which produced the ensemble numbers
+  in Tables 5, 6 and the "Trainable vs Uniform" table):
+    - fits the ensemble head on the logits of the TRAIN nodes,
+    - evaluates on the TEST nodes after every epoch and keeps the epoch with
+      the best TEST accuracy (lines ~169-212, 232-284, 310-360),
+    - tune_ensemble_hyperparameter keeps the grid configuration with the
+      best TEST accuracy (line ~539).
+  In the experiments this is protocol='paper'.
+
+1.2 What the revised manuscript now says
+  template.tex line 458: "the validation nodes are used to select the
+  training epoch and the hyperparameters of the head, and the test nodes
+  are used only once, for the final evaluation."
+  template.tex line 643: "both the configuration and the training epoch are
+  chosen by validation accuracy. The test set is not used for any
+  selection."
+  -> This text does NOT describe the code that produced the numbers. Unless
+     the tables are re-computed with validation selection, the revised
+     paper contains a false statement. Reviewer 4 asked exactly about this
+     (R4-C3), and the code is public. This must be fixed before
+     resubmission.
+
+1.3 What happens under a clean protocol (Exp3, Cora, 12 runs)
+
+                              paper       train_fit     val_split
+                              (fit train, (fit train,   (fit 1/2 val,
+                              select TEST) select val)  select 1/2 val)
+  Uniform logits (0 params)   90.13       90.13         90.13
+  Learned scalar  (5)         90.41 +0.28 89.90 -0.23   90.11 -0.02
+  Learned per-class (35)      90.45 +0.32 90.04 -0.09   90.28 +0.15
+  Learned node-MLP (2.6-10.5k)90.96 +0.83 89.94 -0.18   90.07 -0.06
+  Stacking LogReg (252)       90.22 +0.09 89.90 -0.23   89.98 -0.15
+  Entropy-weighted (0 params) 90.36 +0.23 90.36 +0.23   90.36 +0.23
+  Best single view (by val)   89.62
+
+  Pure selection effect = paper - train_fit (same fit nodes, only the
+  selection set changes from val to test):
+    node-MLP +1.01 pp, scalar +0.51 pp, per-class +0.42 pp, stacking +0.32 pp,
+    all rules without a selection step: 0.00 pp.
+
+  Second confirmation (Exp1 with --eval_set val): the heads are trained and
+  selected exactly as under 'paper' (select on test), but scored on the
+  validation nodes. There the gain disappears completely:
+    uniform 92.16, scalar 92.07, per-class 92.11, node-MLP 92.16
+    (gap recovered: -3.6%, -1.5%, -0.2%)
+  So the heads are better only on the nodes that were used to pick them.
+
+1.4 What this means
+  On Cora, the whole advantage of the learned heads over uniform averaging
+  in the current paper comes from choosing the epoch/configuration on the
+  test set. Under a leak-free protocol, the learned heads are equal to
+  uniform averaging (differences of -0.2 to +0.2 pp, inside the noise).
+  The ensemble ITSELF is still useful: uniform averaging beats the best
+  single view (90.13 vs 89.62) and the oracle shows 94.46 is reachable.
+
+  All experiments below that were run with PROTOCOL=paper (Exp1, 4, 5, 6,
+  7, 8, 9) describe how heads behave WHEN selected on test. Their
+  descriptive parts (what the weights look like) are still informative;
+  their accuracy gains are not reportable as they are. They must be rerun
+  with PROTOCOL=val_split (see Section 15).
+
+1.5 A second, smaller leakage issue (R4-C3 point 1)
+  Under 'paper' and 'train_fit' the head is fit on train-node logits. The
+  GNNs were fit on these nodes, so their logits are nearly perfect and
+  over-confident (fit accuracy is about 6 pp above test accuracy in Exp8).
+  The head learns from nodes that do not look like test nodes. 'val_split'
+  fits on validation-node logits, which the GNNs have not trained on, so
+  the head sees the same kind of errors it will meet on test.
+
+
+---------------------------------------------------------------------
+2. SHARED DESIGN (experiments/ensemble_experiments/ensemble_common.py)
+---------------------------------------------------------------------
+
+2.1 Views
+  One view = one LoRA init (PiSSA, Orthogonal, Gaussian, LoftQ, EVA) ->
+  its cached LLM node embeddings -> one GNN trained exactly as in the paper
+  (train mask, early stopping on val). Full-graph logits are cached in
+  results/ensemble_experiments/gnn_views/<tag>/ and reused by all nine
+  experiments, so every fusion rule is compared on exactly the same GNNs,
+  nodes and labels. Standalone test accuracies (mean over runs):
+    PiSSA 89.11, Orthogonal 88.70, Gaussian 89.90, LoftQ 89.85, EVA 89.58.
+
+2.2 Runs
+  gnn_seeds (retrain the 5 GNNs with another seed) x fuse_seeds (another
+  val fit/select split and head initialisation). Two sources of noise:
+  GNN training and fusion-head training. Runs sharing a GNN seed are not
+  independent (the tests in Exp4 handle this).
+
+2.3 Three protocols (--protocol)
+  paper      fit on train logits, select epoch (+ config with --tune 1) on
+             TEST. Reproduces ensemble_gnns_learning.py. Biased.
+  train_fit  fit on train logits, select on val, test scored once.
+  val_split  split val nodes 50/50 (per fuse seed): fit on one half, select
+             on the other, test scored once. The recommended protocol.
+
+2.4 Fusion rules (all take the stacked view logits L [M x n x C])
+  parameter-free : uniform logits, uniform probs, majority vote,
+                   max confidence, entropy-weighted average
+  label-using    : val-accuracy-weighted, per-view temperature + uniform
+  learned        : scalar weights (M params, global, WeightLearner
+                   num_layers=1), per-class weight matrix (M x C params,
+                   global, WeightLearnerPerClass num_layers=1),
+                   node-MLP (WeightLearner num_layers>=2, node-conditioned
+                   = paper Method 1), stacking (logistic regression).
+
+  IMPORTANT MISMATCH: the paper's Method 2 (MLP that outputs an M x C matrix
+  per node) and Method 3 (one MLP per class, PerClassMLPEnsemble) are NOT
+  in these experiments. The experiments' "per_class" is the static M x C
+  matrix, not Method 2. Only the node-MLP = Method 1 matches the paper.
+  In the figures the scalar and per-class heads are labelled "(DIVERGE)";
+  in the paper text call them "global scalar" and "global class-level"
+  variants, or add Methods 2 and 3 to fuse() before the final runs.
+
+2.5 --tune 1
+  Grid over layers {2,3} x hidden {64,128,256} x dropout {0.3,0.5} x lr
+  {1e-4,1e-3,1e-2} (36 configs for the MLP, 3 lrs for scalar/per-class),
+  same as tune_ensemble_hyperparameter. Under 'paper' the grid is chosen on
+  test (this inflates the MLP most, because it has the most configs).
+
+
+---------------------------------------------------------------------
+3. EXPERIMENT 1 - exp1_disagreement_stratified.py
+   "WHERE does the adaptive head beat averaging?"
+   Answers: R2-C5 (why), R4-C6 (marginal gains).
+---------------------------------------------------------------------
+
+Idea
+  A convex combination of logits (uniform, scalar or node-MLP weights)
+  cannot change the prediction on a node where all five views predict the
+  same label. So any gain over uniform MUST come from nodes where the views
+  disagree. The oracle (correct if ANY view is correct) gives the maximum
+  that any fusion rule could reach.
+
+Procedure
+  1. For every test node count how many views agree on the plurality label
+     (5/5 = unanimous ... 1/5 = all different).
+  2. Accuracy per bucket for oracle, uniform, and each learned head.
+  3. Headline: share of the uniform -> oracle gap recovered
+        gap_recovered = (acc_head - acc_uniform) / (acc_oracle - acc_uniform)
+
+Results (Cora, paper protocol, 12 runs)
+  agreement  share   oracle  uniform  scalar  per-class  node-MLP
+  5/5        87.2%   95.29   95.29    95.29   95.29      95.29
+  4/5         7.1%   90.97   64.57    65.35   66.02      68.37
+  3/5         4.8%   87.85   44.98    49.30   47.79      56.44
+  2/5         0.9%   79.17   27.08    27.08   35.42      33.33
+  overall            94.46   90.13    90.41   90.45      90.96
+  gap recovered              0%       +5.9%   +7.6%      +19.6%
+
+  val_split (earlier run): scalar -0.7%, per-class +4.9%, node-MLP +2.0%
+  paper heads scored on val nodes: -3.6%, -1.5%, -0.2%
+
+How to read it
+  + Clean, easy-to-explain structure: 87% of the test nodes are unanimous
+    and all rules are identical there. Only ~13% of the nodes can be
+    affected by the fusion rule. This explains WHY any gain over averaging
+    must be small, and why ArXiv shows 77.89 vs 77.69 (R4-C6).
+  + There is a lot of headroom: the oracle is 4.3 pp above uniform. The
+    views ARE complementary (strong support for R1-C2 / R2-C1).
+  - The head recovers 20% of the gap only under selection on test; under a
+    clean protocol it recovers ~0-5%.
+
+Use in the paper
+  Very good figure/table for the main text (bucket table + oracle). Rerun
+  under val_split and report the honest gap-recovered number.
+
+
+---------------------------------------------------------------------
+4. EXPERIMENT 2 - exp2_weak_view_injection.py
+   "Do the learned weights ADAPT when one view becomes weak or redundant?"
+   Answers: R2-C5 (behaviour) directly. This is the best "behaviour" test.
+---------------------------------------------------------------------
+
+Idea
+  A controlled intervention instead of a correlation. Damage one view on
+  purpose, retrain its GNN, refit every fusion rule, and watch the weight
+  on the damaged view and the ensemble accuracy.
+
+Procedure
+  Part A - corruption of the target view's LLM embeddings (target = best
+  view by val for each GNN seed, so each GNN seed damages a different view):
+    noise:s   X + s * std(X) * N(0,1), s in {0, 0.5, 1, 2, 4, 8}
+    shuffle   rows permuted (text <-> node link destroyed, graph kept)
+    random    pure Gaussian features
+    base      embeddings of the base (not fine-tuned) LLM
+    removed   the view is dropped (4-view ensemble) as a reference
+  Part B - redundancy: the weakest view's logits are copied k = 0..4 extra
+  times. Uniform then gives that view (1+k)/(M+k) of the vote.
+
+Results (Cora, val_split, untuned; one GNN seed per target x 3 fuse seeds)
+  Part A, weight on the damaged view (scalar / per-class / node-MLP;
+  uniform = 0.200):
+    ORTHOGONAL  clean 0.398/0.271/0.237 -> shuffle (view acc 48.7%)
+                0.112/0.169/0.024 -> random 0.077/0.108/0.046
+    EVA         clean 0.176/0.187/0.187 -> random 0.135/0.079/0.019
+    LOFTQ       clean 0.230/0.200/0.068 -> shuffle 0.116/0.149/0.015
+    PISSA       clean 0.647/0.498/0.677 -> random 0.119/0.140/0.123
+  Accuracy with the ORTHOGONAL view shuffled (view alone 48.7%):
+    uniform 90.22, scalar 90.34, per-class 90.59, node-MLP 90.47,
+    view removed (uniform) 90.41.
+  In most settings uniform accuracy changes by < 0.5 pp.
+
+  Part B, total weight on the duplicated group / accuracy:
+    copies  uniform        scalar         per-class      node-MLP
+    +0      0.200  90.13   0.130  90.11   0.155  90.34   0.151  90.19
+    +2      0.429  90.13   0.230  90.19   0.283  90.22   0.139  90.22
+    +4      0.556  89.94   0.295  90.10   0.339  90.08   0.113  90.07
+
+How to read it
+  + The weights behave sensibly. The weight on a damaged view falls
+    monotonically with the damage, down to almost 0 for the node-MLP
+    (0.015-0.046). Under duplication, uniform gives the copied view 56% of
+    the vote; the node-MLP keeps it at 11% (it "sees" that the copies
+    carry no new information). This is exactly the "show weights adapt
+    when one view is weak" evidence from the rebuttal plan.
+  - But on Cora the adaptation barely matters for accuracy: with 5 views,
+    uniform averaging is already robust to one broken view (the four
+    healthy views out-vote it). Uniform loses only 0.19 pp at +4 copies.
+  - Single GNN seed per target: noisy. Rerun with all GNN seeds and
+    --target all.
+
+Use in the paper
+  Main text or appendix: the noise curve (weight on the damaged view vs
+  noise level) and the duplication plot. Frame it as ROBUSTNESS: the
+  learned head is a safeguard that removes a broken or redundant view
+  automatically; uniform averaging has no such mechanism. Do not frame it
+  as an accuracy gain on clean data.
+
+
+---------------------------------------------------------------------
+5. EXPERIMENT 3 - exp3_fusion_baselines.py
+   "Is LEARNING needed, and what do the extra parameters buy?"
+   Answers: R2-C5 (cost + why), R1-C6 (ablation vs mean/max/vote), R1-C6/
+   R4-C3 (protocol).
+---------------------------------------------------------------------
+
+Procedure
+  Fuse the same 5 GNNs with 11 rules (Section 2.4). For each: number of
+  extra parameters, accuracy and macro-F1 (mean +/- std over 12 runs), gain
+  over uniform, paired win/tie/loss counts vs uniform. Run under all three
+  protocols and compute the selection-on-test inflation.
+
+Results
+  See the table in Section 1.3. Additional points:
+  - Parameter counts: scalar 5, per-class 35, stacking 252, node-MLP
+    2,629-10,501 (depends on the tuned hidden size).
+  - Entropy-weighted averaging (0 parameters, no labels) wins 12/12 runs,
+    +0.23 pp, and it is protocol-independent. Under val_split it is the
+    best rule overall.
+  - Under val_split the node-MLP wins 5 and loses 7 of 12 runs vs uniform.
+  - Macro-F1 follows accuracy (node-MLP 89.71 under paper, 88.73 under
+    val_split; uniform 88.67).
+
+How to read it
+  + This is the experiment reviewers R1-C6 asked for ("learned adaptive
+    ensemble vs mean / max / majority vote") and it is complete.
+  - It shows that, under a clean protocol on Cora, no learned head beats a
+    parameter-free rule. The 10k-parameter MLP does not pay for itself.
+
+Use in the paper
+  Main text, one table: rules x (#params, acc, F1) under val_split, plus a
+  short sentence on the paper-protocol inflation (or just fix the protocol
+  and do not mention the old one).
+
+
+---------------------------------------------------------------------
+6. EXPERIMENT 4 - exp4_stability_significance.py
+   "Are the learned weights STABLE, and is the gain SIGNIFICANT?"
+   Answers: R2-C5 (behaviour), R4-C5 (statistics).
+---------------------------------------------------------------------
+
+Procedure (25 runs = 5 GNN seeds x 5 fuse seeds)
+  Stability: mean +/- std and coefficient of variation (CV) of every view's
+  weight, Kendall's W of the view ranking across runs (1 = same ranking
+  always, 0 = no agreement), share of the weight variance explained by the
+  GNN seed.
+  Significance: per run exact McNemar test + node-bootstrap CI of the gain;
+  across runs paired t-test and Wilcoxon, on all runs and on GNN-seed means
+  (the conservative version); Holm-Bonferroni over the three heads.
+
+Results (Cora, paper protocol)
+  Weights (mean +/- std):
+    view        scalar          per-class       node-MLP
+    PiSSA       0.196+/-0.106   0.224+/-0.068   0.175+/-0.112
+    Orthogonal  0.204+/-0.104   0.200+/-0.058   0.222+/-0.137
+    Gaussian    0.175+/-0.090   0.180+/-0.078   0.260+/-0.217
+    LoftQ       0.294+/-0.162   0.256+/-0.123   0.261+/-0.150
+    EVA         0.131+/-0.059   0.140+/-0.062   0.082+/-0.099
+    Kendall's W 0.13            0.32            0.25
+    CV ~0.5 (scalar), 0.3-0.5 (per-class), 0.6-1.2 (MLP)
+    Variance share from GNN seed: 1.00 (scalar, per-class), 0.58-0.87 (MLP)
+
+  Gain over uniform:
+    scalar    +0.41+/-0.32 pp, positive 20/25, McNemar-sig 0/25,
+              t p=1.8e-6 (Holm 3.6e-6), GNN-seed means t p=0.063
+    per-class +0.48+/-0.38 pp, positive 25/25, McNemar-sig 0/25,
+              GNN-seed means t p=0.065
+    node-MLP  +1.08+/-0.53 pp, positive 25/25, McNemar-sig 8/25,
+              t p=5.6e-10 (Holm 1.7e-9), GNN-seed means t p=0.014
+
+How to read it
+  - The weights are NOT stable: the ranking of the views changes from run
+    to run (Kendall's W 0.13-0.32 is low), and the std is half the mean.
+    The one repeatable pattern: EVA always gets the lowest weight, LoftQ is
+    usually the highest.
+  - Variance share 1.00 for scalar/per-class means the weights are fully
+    decided by the GNN seed (these heads start from a fixed init and are
+    fit on the same train nodes, so the fuse seed changes nothing). The
+    weights follow the particular GNN run, not a property of the LoRA init.
+  - The significance numbers are all under selection on test, so they
+    are not valid evidence. The conservative GNN-seed-mean tests are
+    already borderline for scalar and per-class (p ~ 0.06).
+  + The script itself (McNemar, bootstrap CI, t/Wilcoxon on seed means,
+    Holm) is exactly the statistical reporting R4-C5 asks for. Reuse it
+    for the val_split rerun and for DIVERGE-vs-baseline tests.
+
+Use in the paper
+  Appendix: weight table with std and Kendall's W (honest description of
+  behaviour). Main text only the significance line, after the val_split
+  rerun.
+
+
+---------------------------------------------------------------------
+7. EXPERIMENT 5 - exp5_node_level_routing.py
+   "Does the node-conditioned MLP ROUTE each node to the right view?"
+   Answers: R2-C5 (behaviour), R4-C3 (node-conditioned vs global).
+---------------------------------------------------------------------
+
+Idea
+  The paper claims the MLP produces node-specific weights. If this is
+  useful, a view should receive more weight on nodes where it is correct,
+  and the top-weighted view should be correct more often than a random view
+  on nodes where the views disagree.
+
+Procedure (test nodes)
+  1) mean weight of each view on nodes where it is correct vs wrong
+     (one-sided Mann-Whitney U per run)
+  2) Spearman(weight, the view's own confidence / margin)
+  3) routing accuracy on "contested" nodes (views disagree, at least one is
+     correct): is the top-weighted view correct? vs a random view and vs
+     the most confident view
+  4) normalised entropy of the weight vector (1 = uniform, 0 = one view)
+
+Results (Cora, paper protocol, 12 runs, ~62 contested nodes per run)
+  weight when correct vs wrong:
+    PiSSA +0.009, Orthogonal +0.004, Gaussian +0.032, LoftQ -0.025,
+    EVA -0.004 (MWU p<0.05 in 0-4 of 12 runs)
+  Spearman(weight, confidence): +0.01 to -0.27 (never positive)
+  routing on contested nodes:
+    top-weighted view correct   59.6 +/- 5.8 %
+    most confident view correct 62.3 +/- 3.2 %
+    random view correct         55.9 +/- 1.9 %
+  weight entropy: unanimous 0.65, contested 0.74, all 0.67
+
+How to read it
+  - The MLP does produce different weights for different nodes (entropy
+    0.65, not 1.0), so it is node-conditioned in fact, not only on paper.
+  - But the routing is weak: it is only 3.7 pp better than picking a random
+    view, and WORSE than the simple "trust the most confident view" rule.
+  - The weights are MORE uniform on contested nodes (0.74) than on
+    unanimous ones (0.65) - the opposite of what useful routing would do.
+  - Weights do not follow the view's confidence; for LoftQ the weight is
+    even higher when LoftQ is wrong.
+  This agrees with Exp3: the node-MLP does not learn a reliable routing rule
+  on Cora.
+
+Use in the paper
+  Appendix, with honest wording. It answers R4-C3 ("global or
+  node-conditioned?"): node-conditioned, and here is what the per-node
+  weights do.
+
+
+---------------------------------------------------------------------
+8. EXPERIMENT 6 - exp6_per_class_weights.py
+   "Do the views SPECIALISE per class?"
+   Answers: R2-C5 (behaviour of class-level weights), supports R1-C2/R2-C1.
+---------------------------------------------------------------------
+
+Procedure
+  The per-class head learns W [5 views x 7 classes]. Compare with each
+  view's per-class accuracy (on the fit nodes, to avoid circularity).
+  - Spearman(W[:, c], per-class view accuracy), averaged over classes
+  - classes whose top-weighted view is not the globally best view
+  - number of different views that are top-weighted in some class
+  - per-class gain over uniform vs per-class view disagreement
+
+Results (Cora, paper protocol, 12 runs)
+  rho(class weight, view accuracy on that class) = +0.36 +/- 0.17
+  classes where the top view is NOT the global best: 3.2 / 7
+  distinct top-weighted views: 2.2 / 5
+  rho(per-class disagreement, per-class gain) = +0.12 (p = 0.28)
+  Mean weight matrix: all entries between 0.15 and 0.28 (uniform = 0.20);
+  in the mean matrix PiSSA is highest in 5/7 classes and Gaussian in
+  classes 2 and 5; Orthogonal and EVA are lowest almost everywhere.
+
+How to read it
+  + The class weights point the right way: views get more weight on the
+    classes they are good at (rho +0.36), and in ~3 of 7 classes the best
+    view is not the globally best one. This is the motivation of Method 2
+    and it is partly visible.
+  - The effect is small: the matrix is close to uniform, only ~2 views are
+    ever top, and the per-class gain does not grow with disagreement.
+  - Tested head = static M x C matrix, not paper Method 2/3.
+  - Cora has only 7 classes; arXiv (40) and WikiCS (10) give more room.
+    This matches the diversity experiment (init x class ANOVA eta2 = 0.24,
+    p = 0.12 on Cora).
+
+Use in the paper
+  Appendix: the two heatmaps side by side (learned weight vs per-class view
+  accuracy). Good visual answer to "how do the weights behave".
+
+
+---------------------------------------------------------------------
+9. EXPERIMENT 7 - exp7_logit_scale_calibration.py
+   "Is part of the adaptive gain simply RECALIBRATION?"
+   Answers: R2-C5 (why / mechanism).
+---------------------------------------------------------------------
+
+Idea
+  Averaging raw logits is not an equal vote: a view with larger logits
+  dominates. A learned scalar weight could just be undoing scale
+  differences (acting as an inverse temperature), which a 5-parameter
+  temperature fit does too.
+
+Results (Cora, paper protocol)
+  Per view: logit scale 3.95-4.14, effective share of the uniform logit
+  sum 0.196-0.207 (equal vote = 0.200), temperature 0.72-0.96, ECE
+  0.041-0.052, accuracy 88.7-89.9.
+
+  Ensemble rules:            acc     ECE     NLL
+    uniform logits           90.13   0.040   0.313
+    uniform probs            90.22   0.029   0.298
+    temp-scaled uniform      90.22   0.035   0.313
+    scalar                   90.41   0.042   0.319
+    per-class                90.45   0.044   0.316
+    node-MLP                 90.96   0.043   0.317
+
+  Temperature scaling alone recovers 33-50% of the scalar gain, 29-43% of
+  the per-class gain, 11-17% of the node-MLP gain.
+  Spearman(learned scalar weight, 1/T) = +0.49.
+
+How to read it
+  + Clear mechanism result: on Cora all five views already have almost the
+    same logit scale, so uniform logit averaging is already an equal vote.
+    There is nothing for a re-weighting to correct. This is a good,
+    principled explanation for why a learned head cannot gain much here.
+  + Part of the scalar head's behaviour IS recalibration (rho +0.49 with
+    1/T).
+  - The learned heads do not improve calibration: ECE 0.042-0.044, worse
+    than uniform probability averaging (0.029).
+
+Use in the paper
+  Appendix table + one sentence in the main text ("the views have
+  near-identical logit scales, so uniform averaging is already an equal
+  vote").
+
+
+---------------------------------------------------------------------
+10. EXPERIMENT 8 - exp8_label_efficiency.py
+   "How many labels does the head need, and does it overfit?"
+   Answers: R2-C5 (cost of extra parameters), R1-C6 (overfitting).
+---------------------------------------------------------------------
+
+Procedure
+  Subsample the fit nodes to 5, 10, 25, 50, 100% (3 repeats), keep the
+  selection and test nodes fixed, refit every head. Report test accuracy,
+  gain over uniform, fit-minus-test accuracy gap, labels per parameter.
+
+Results (Cora, paper protocol)
+  fit labels     81      162     406     812     1624
+  scalar gain   +0.34   +0.31   +0.32   +0.30   +0.28
+  per-class     +0.28   +0.29   +0.36   +0.35   +0.32
+  node-MLP      +0.83   +0.92   +0.84   +0.90   +0.91
+  stacking      -0.92   -0.18   +0.13   +0.10   +0.09
+  fit-test gap: ~6 pp for all DIVERGE heads, 7-10 pp for stacking
+  node-MLP labels per parameter: 0.03-0.2
+
+How to read it
+  - The node-MLP gets the SAME gain with 81 labels (0.03 labels per
+    parameter) as with 1,624. A 2,600-parameter model cannot really learn
+    anything from 81 labels, so the gain does not come from what it learns
+    from labels. It comes from picking the epoch/config on test
+    (Section 1). This is a third independent sign of the selection effect.
+  - The ~6 pp fit-test gap comes from fitting on over-confident train
+    logits (Section 1.5).
+  + Stacking (a standard learned combiner) clearly overfits with few labels
+    (-0.92 pp at 81 labels); the constrained convex heads do not. This is a
+    valid point in favour of the softmax-constrained design.
+  Under val_split this experiment becomes meaningful and is the direct
+  answer to "does the head overfit?". Rerun it.
+
+Use in the paper
+  After the val_split rerun: one curve (accuracy vs #labels) in the
+  appendix. Do not report the current version.
+
+
+---------------------------------------------------------------------
+11. EXPERIMENT 9 - exp9_view_contribution.py
+   "What does each view CONTRIBUTE, and do the weights reflect it?"
+   Answers: R2-C5 (behaviour + why), R1-C2 (each view useful?).
+---------------------------------------------------------------------
+
+Procedure
+  For all 31 non-empty subsets of the 5 views, refit the rule and measure
+  test accuracy v(S). From that: leave-one-view-out drop v(all) -
+  v(all minus i), and the exact Shapley value of each view. Compare with
+  the learned scalar weights and standalone accuracy (Spearman).
+
+Results (Cora, paper protocol, 12 runs)
+  Shapley (pp): PiSSA 11.7-11.8, Orthogonal 11.6-11.7, Gaussian 12.0-12.1,
+                LoftQ 12.1, EVA 11.9-12.0 (nearly equal for every rule)
+  LOO drop (pp): -0.23 ... +0.14 (removing any one view changes almost
+                nothing; several are negative = slightly better without)
+  Spearman: weight ~ Shapley +0.03..+0.06
+            weight ~ standalone accuracy +0.10
+            Shapley ~ standalone accuracy +0.88..+0.92
+
+How to read it
+  + The five views contribute almost equally. This is WHY uniform
+    averaging is near-optimal on Cora: if all views are worth the same,
+    equal weights are the right weights.
+  - Any single view is almost redundant given the other four (LOO ~ 0).
+    The ensemble gain comes from having several views, not from a
+    particular one.
+  - The learned scalar weights do NOT track the contribution of the views
+    (rho ~0.05). So the head's weights are not measuring view usefulness.
+
+Use in the paper
+  Appendix table. One sentence in the main text: "Shapley analysis shows
+  the five views contribute nearly equally (11.6-12.1 pp), which explains
+  why uniform averaging is already close to optimal on Cora."
+
+
+---------------------------------------------------------------------
+12. OVERALL VERDICT: HOW FAR DO THE RESULTS ANSWER THE REVIEWERS?
+---------------------------------------------------------------------
+
+Summary of the evidence (Cora):
+
+  Claim                                        Evidence            Verdict
+  -------------------------------------------  ------------------  ----------------
+  The views are complementary (headroom)       Exp1 oracle +4.3pp  STRONG support
+  Ensemble > best single view                  Exp3 90.13 > 89.62  Supported
+  Weights react to a damaged / duplicated view Exp2                STRONG support
+  Class weights follow per-class view skill    Exp6 rho +0.36      Weak support
+  MLP weights are node-conditioned             Exp5 entropy 0.65   Supported
+  MLP routes nodes to the correct view         Exp5 59.6 vs 55.9   NOT supported
+                                               (max-conf 62.3)
+  Weights are stable across runs               Exp4 W 0.13-0.32    NOT supported
+  Weights reflect view contribution            Exp9 rho ~0.05      NOT supported
+  Learned head > uniform (clean protocol)      Exp3 val_split      NOT supported
+                                               -0.06..+0.15 pp
+  Learned head > parameter-free rules          Exp3 entropy-w.     NOT supported
+  Paper gain is real, not selection on test    Exp1-val, Exp3, 8   CONTRADICTED
+
+Why the learned head cannot help much on Cora (a coherent story you can
+tell the reviewer):
+  - 87% of nodes are unanimous: no fusion rule can change them (Exp1).
+  - The views have equal logit scale, so uniform logits are already an
+    equal vote (Exp7).
+  - The views contribute equally (Exp9), so equal weights are the right
+    weights.
+  -> When views are balanced, the optimal weights are ~uniform, and a
+     learned head can only add estimation noise. A learned head is useful
+     when the views are UNBALANCED (Exp2: it removes broken or redundant
+     views automatically).
+
+How much each comment is answered (estimate, Cora results as they are):
+
+  R2-C5 part (a) "how the learned weights behave":  ~80%
+    Exp2, 4, 5, 6, 7, 9 give a far more complete picture than most papers.
+    Missing: Methods 2/3 of the paper, other datasets.
+
+  R2-C5 part (b)/(c) "why they improve over simple averaging":
+    If you keep the claim "they improve": ~10-20%. The reviewer will not be
+      convinced, and anyone who reads the code (R4) can show the gain is
+      selection on test. High risk.
+    If you reframe honestly (Section 13): ~65-75%. You then answer the
+      question with a real mechanism: when and why learning helps (weak /
+      redundant views) and why it does not on balanced views (Exp1, 7, 9).
+      IPM reviewers usually accept this, especially because the core
+      method (multi-view ensemble) still beats every single view.
+
+  R1-C6 / R4-C3 (protocol, leakage, global vs node-conditioned):
+    ~90% IF the numbers are recomputed with val_split and the text matches
+    the code. ~0% (and a credibility problem) if the current text (val
+    selection) stays next to numbers produced with test selection.
+
+  R4-C5 (statistics): ~70% after the val_split rerun of Exp4
+    (McNemar + bootstrap + Holm). Still need DIVERGE-vs-baseline tests.
+
+  R4-C6 (marginal ArXiv gain): ~70%. Exp1 explains it (most nodes
+    unanimous; small room), once run on ArXiv.
+
+IMPORTANT RISK
+  The revised text already claims validation selection. If the reviewer or
+  editor re-runs the public code, the ensemble numbers will not reproduce
+  under that protocol. This is much worse than a smaller gain. Fix the
+  protocol first; everything else is secondary.
+
+
+---------------------------------------------------------------------
+13. WHAT TO PUT IN THE PAPER, AND WHICH CLAIMS TO CHANGE
+---------------------------------------------------------------------
+
+13.1 Fix first (mandatory)
+  1. Change ensemble_gnns_learning.py (and tune_ensemble_hyperparameter)
+     to select epoch and config on validation, never on test. The cleanest
+     option is the val_split protocol already in ensemble_common.py (fit
+     on half of val, select on the other half). Recompute every DIVERGE
+     Ensemble row in Tables 5, 6, the encoder table and the "Trainable vs
+     Uniform" table.
+  2. Report mean +/- std over seeds (the tables currently show +/- 0.00).
+  3. Always report Uniform averaging next to the learned heads in the main
+     tables.
+
+13.2 Suggested new subsection
+  "Behaviour of the adaptive ensemble" (~1 page + appendix)
+  Main text:
+    - Table: fusion rules (#params, acc, F1) under the clean protocol (Exp3)
+      for at least Cora + one large dataset.
+    - Figure: Exp1 agreement buckets with oracle.
+    - Figure: Exp2 weight on the damaged view vs noise, + duplication.
+    - 3-4 sentences on the mechanism (Exp7 equal logit scale, Exp9 equal
+      Shapley values).
+  Appendix:
+    - Exp4 weight table (+ Kendall's W) and significance tests
+    - Exp5 routing, Exp6 heatmaps, Exp7 calibration, Exp8 label curve,
+      Exp9 Shapley table
+
+13.3 Claims in template.tex that must change (if val_split confirms Cora)
+  Line 176 (contributions): "trainable ensemble learning significantly
+    improves classification performance compared to simple averaging
+    methods" -> not supported. Suggested: "we analyse when trainable
+    ensemble weights help: they automatically down-weight weak or redundant
+    views, whereas on balanced views they perform on par with uniform
+    averaging."
+  Line 452: "the proposed method assumes that not all models contribute
+    equally; therefore, adaptive weighting can improve the final
+    performance" -> keep as a hypothesis, then point to the new analysis.
+  Line 902: "all three proposed trainable methods deliver superior
+    performance compared to the simple averaging approach" -> replace with
+    the numbers from the clean protocol.
+  Line 726: "through the ensemble learning mechanism, it consistently
+    improves model performance" -> OK if it means the ensemble vs single
+    views; not OK if it means learned vs uniform.
+  Abstract line 117: "adaptively ensembles the GNN pool with trainable
+    model- and class-level weights" -> fine as a description; do not add
+    "outperforming averaging".
+  Lines 458/643: keep, but only after the code actually does what they say.
+
+13.4 A positive framing the data supports
+  - The main source of DIVERGE's gain is the multi-view ensemble itself:
+    every ensemble beats its best member, and the oracle shows +4.3 pp of
+    complementary information.
+  - The adaptive head is a SAFEGUARD, not a booster: it detects and
+    down-weights broken views (weight -> 0.02) and duplicated views
+    (0.11 instead of 0.56), which uniform averaging cannot do. This matters
+    in practice when you do not know in advance which LoRA init will fail
+    on a new dataset.
+  - On balanced views the optimal weights are uniform; the analysis shows
+    WHY (equal logit scale, equal Shapley value, 87% unanimous nodes).
+  - Option: consider entropy-weighted averaging as a parameter-free default
+    (best on Cora under every protocol, 12/12 wins, +0.23 pp).
+
+
+---------------------------------------------------------------------
+14. DRAFT RESPONSE TO THE REVIEWERS (adapt after all datasets are run)
+---------------------------------------------------------------------
+
+R2-C5 (behaviour of learned weights, why better than averaging)
+
+  We thank the reviewer for this important comment. We added a dedicated
+  analysis of the adaptive ensemble (Section X, Appendix Y), in which all
+  fusion rules are compared on exactly the same GNNs and nodes, and the
+  ensemble head is fitted and selected only on validation nodes. We found
+  the following.
+  (i) Where fusion can help: on Cora, 87% of the test nodes receive the
+  same prediction from all five views; no convex fusion rule can change
+  these. The remaining 13% contain the complementary information: an oracle
+  that picks the correct view would reach 94.5% vs 90.1% for uniform
+  averaging.
+  (ii) How the weights behave: when we deliberately degrade one view
+  (Gaussian noise, shuffled or random features), its learned weight falls
+  monotonically, to 0.02-0.05 for the node-conditioned head; when we
+  duplicate a view, uniform averaging gives it up to 56% of the vote,
+  while the learned head keeps it at 11%. Class-level weights correlate
+  with the per-class accuracy of each view (Spearman 0.36).
+  (iii) Why the learned head does not always beat averaging: on Cora the
+  five views have almost identical logit scales (share of the uniform sum
+  0.196-0.207) and almost identical Shapley contributions (11.6-12.1 pp),
+  so uniform weights are already close to optimal, and the learned heads
+  perform on par with uniform averaging (differences within +/-0.2 pp).
+  We have therefore revised our claim: the trainable weights act as a
+  safeguard that removes weak or redundant views automatically, and their
+  benefit over simple averaging depends on how unbalanced the views are.
+  [Add the numbers for the other datasets here; if the learned head wins on
+   arXiv/WikiCS under val_split, report that as the stronger result.]
+
+R1-C6 / R4-C3 (training protocol of the head, leakage, global vs node)
+
+  We now describe the protocol explicitly (Section 5.x and new Figure Z).
+  The GNNs are trained on the training nodes. The ensemble head is fitted
+  on the GNN logits of one half of the validation nodes, and its epoch and
+  hyperparameters are selected on the other half; the test nodes are used
+  once. We do not fit the head on training-node logits, because the GNNs
+  were trained on those nodes and their logits are over-confident (the fit
+  accuracy exceeds the test accuracy by ~6 pp in that setting). While
+  preparing this revision we found that our original implementation
+  selected the head's epoch on the test nodes; all ensemble results in
+  Tables 5, 6 and 8 have been recomputed with the corrected protocol. The
+  Method-1 weights are node-conditioned (an MLP maps the concatenated
+  logits of a node to M softmax weights); the weights differ between nodes
+  (normalised entropy 0.65), and we report their behaviour in Appendix Y.
+  [Being open about the test-selection bug is safer than hiding it: the
+   code is public and R4 already suspects leakage.]
+
+
+---------------------------------------------------------------------
+15. WORK TO FINISH BEFORE RESUBMISSION
+---------------------------------------------------------------------
+
+  1. MOST IMPORTANT: set PROTOCOL=val_split in
+     scripts/run_ensemble_experiments.bat and rerun all nine experiments.
+     Fix ensemble/ensemble_gnns_learning.py to select on validation and
+     recompute the paper tables.
+  2. Add paper Methods 2 and 3 to ensemble_common.fuse() (WeightLearnerPer-
+     Class with num_layers>=2, and PerClassMLPEnsemble), so the analysed
+     heads are the ones in the paper. Rename the static heads in
+     METHOD_TITLES (not "(DIVERGE)").
+  3. Rerun Exp2 (the paper/tuned run was interrupted) with all GNN seeds
+     and --target all, under val_split.
+  4. Run on more datasets. At least PubMed and one of WikiCS / arXiv.
+     arXiv (40 classes) is where class-level weights have the most room,
+     and where the views may be less balanced. If the learned head helps
+     anywhere under a clean protocol, it is most likely there.
+  5. Val_split on Cora fits the head on only ~270 nodes. Also try
+     --fit_frac 0.7, or cross-fitting on val (k-fold), to give the head more
+     labels without touching test.
+  6. Use Exp4's tests (McNemar, bootstrap CI, Holm, GNN-seed means) also for
+     DIVERGE vs baselines (R4-C5).
+  7. Aggregate all *_summary.csv files into one table per experiment (mean
+     over datasets + per-dataset rows).

@@ -1,0 +1,574 @@
+
+======================================================================
+           Ensemble Edge Predictor - Full Pipeline Results            
+======================================================================
+
+Dataset: cora
+LLM: llama_3.2_1B, PEFT: lora
+Edge Removal Strategy: high_uncertainty
+Top-k Ratio: 0.1
+
+
+======================================================================
+Ensemble Hyperparameter Tuning - Ensemble with Modified Datasets (Edge Editing)
+======================================================================
+
+
+Ensemble Hyperparameter Tuning Results:
+
+Best Hyperparameters:
+  • Number of Layers: 2
+  • Hidden Dimension: 128
+  • Dropout: 0.5
+  • Learning Rate: 0.01
+
+Best Performance Metrics:
+  • Test Accuracy: 92.6200 (9262.00%)
+  • Test Macro-F1: 91.2000
+  • Test Weighted-F1: 92.5500
+  • Validation Accuracy: 89.6700 (8967.00%)
+  • Validation Macro-F1: 87.8900
+  • Validation Weighted-F1: 89.5400
+  • Train Accuracy: 98.2100 (9821.00%)
+  • Train Macro-F1: 98.1000
+  • Train Weighted-F1: 98.2100
+
+Hyperparameter Search Space:
+  • Number of Layers: [2, 3]
+  • Hidden Dimensions: [64, 128, 256]
+  • Dropout Options: [0.3, 0.5]
+  • Learning Rates: [0.001, 0.01, 0.0001]
+  • Total Combinations Tested: 36
+
+
+======================================================================
+             Comprehensive GNN Mistakes Analysis - PISSA              
+======================================================================
+
+
+Mistake Analysis:
+  • Total Mistakes: 32
+  • Test Accuracy: 94.10%
+  • Test Nodes: 542
+  
+Mistakes by Split:
+  • Train: 120
+  • Validation: 46
+  • Test: 32
+
+Mistakes by Class:
+  • Class 0: 1/35 (2.86%)
+  • Class 1: 1/168 (0.60%)
+  • Class 2: 7/68 (10.29%)
+  • Class 3: 3/80 (3.75%)
+  • Class 4: 12/65 (18.46%)
+  • Class 5: 2/46 (4.35%)
+  • Class 6: 6/80 (7.50%)
+
+
+======================================================================
+           Comprehensive GNN Mistakes Analysis - ORTHOGONAL           
+======================================================================
+
+
+Mistake Analysis:
+  • Total Mistakes: 38
+  • Test Accuracy: 92.99%
+  • Test Nodes: 542
+  
+Mistakes by Split:
+  • Train: 112
+  • Validation: 46
+  • Test: 38
+
+Mistakes by Class:
+  • Class 0: 1/35 (2.86%)
+  • Class 1: 2/168 (1.19%)
+  • Class 2: 7/68 (10.29%)
+  • Class 3: 0/80 (0.00%)
+  • Class 4: 15/65 (23.08%)
+  • Class 5: 6/46 (13.04%)
+  • Class 6: 7/80 (8.75%)
+
+
+======================================================================
+             Comprehensive GNN Mistakes Analysis - LOFTQ              
+======================================================================
+
+
+Mistake Analysis:
+  • Total Mistakes: 35
+  • Test Accuracy: 93.54%
+  • Test Nodes: 542
+  
+Mistakes by Split:
+  • Train: 101
+  • Validation: 40
+  • Test: 35
+
+Mistakes by Class:
+  • Class 0: 1/35 (2.86%)
+  • Class 1: 4/168 (2.38%)
+  • Class 2: 7/68 (10.29%)
+  • Class 3: 0/80 (0.00%)
+  • Class 4: 11/65 (16.92%)
+  • Class 5: 2/46 (4.35%)
+  • Class 6: 10/80 (12.50%)
+
+
+======================================================================
+              Comprehensive GNN Mistakes Analysis - EVA               
+======================================================================
+
+
+Mistake Analysis:
+  • Total Mistakes: 32
+  • Test Accuracy: 94.10%
+  • Test Nodes: 542
+  
+Mistakes by Split:
+  • Train: 100
+  • Validation: 35
+  • Test: 32
+
+Mistakes by Class:
+  • Class 0: 1/35 (2.86%)
+  • Class 1: 3/168 (1.79%)
+  • Class 2: 5/68 (7.35%)
+  • Class 3: 0/80 (0.00%)
+  • Class 4: 9/65 (13.85%)
+  • Class 5: 1/46 (2.17%)
+  • Class 6: 13/80 (16.25%)
+
+
+======================================================================
+            Comprehensive GNN Mistakes Analysis - GUASSIAN            
+======================================================================
+
+
+Mistake Analysis:
+  • Total Mistakes: 35
+  • Test Accuracy: 93.54%
+  • Test Nodes: 542
+  
+Mistakes by Split:
+  • Train: 135
+  • Validation: 42
+  • Test: 35
+
+Mistakes by Class:
+  • Class 0: 0/35 (0.00%)
+  • Class 1: 3/168 (1.79%)
+  • Class 2: 9/68 (13.24%)
+  • Class 3: 1/80 (1.25%)
+  • Class 4: 16/65 (24.62%)
+  • Class 5: 4/46 (8.70%)
+  • Class 6: 2/80 (2.50%)
+
+
+======================================================================
+                   Ensemble Model Mistakes Analysis                   
+======================================================================
+
+
+Ensemble Model Mistake Analysis:
+  • Total Mistakes: 23
+  • Test Accuracy: 95.76%
+  • Test Nodes: 542
+
+
+======================================================================
+       Best Ensemble Model - Final Results with Visualizations        
+======================================================================
+
+Retrained with best hyperparameters for 200 epochs
+Weight Approach: learnable_per_classes
+
+Final Results:
+  Train - Acc: 98.2100, Macro-F1: 98.1000
+  Val   - Acc: 89.6700, Macro-F1: 87.8900
+  Test  - Acc: 92.6200, Macro-F1: 91.2000
+
+Visualizations saved to: ./ensemble_results/visualizations\cora_best_ensemble_tuned
+
+======================================================================
+           Ensemble Edge Predictor - Full Pipeline Results            
+======================================================================
+
+Dataset: cora
+LLM: llama_3.2_1B, PEFT: lora
+Edge Removal Strategy: high_uncertainty
+Top-k Ratio: 0.1
+
+
+======================================================================
+Ensemble Hyperparameter Tuning - Ensemble with Modified Datasets (Edge Editing)
+======================================================================
+
+
+Ensemble Hyperparameter Tuning Results:
+
+Best Hyperparameters:
+  • Number of Layers: 2
+  • Hidden Dimension: 128
+  • Dropout: 0.3
+  • Learning Rate: 0.001
+
+Best Performance Metrics:
+  • Test Accuracy: 93.1700 (9317.00%)
+  • Test Macro-F1: 91.8500
+  • Test Weighted-F1: 93.1400
+  • Validation Accuracy: 90.4100 (9041.00%)
+  • Validation Macro-F1: 88.5000
+  • Validation Weighted-F1: 90.3300
+  • Train Accuracy: 98.5800 (9858.00%)
+  • Train Macro-F1: 98.3000
+  • Train Weighted-F1: 98.5800
+
+Hyperparameter Search Space:
+  • Number of Layers: [2, 3]
+  • Hidden Dimensions: [64, 128, 256]
+  • Dropout Options: [0.3, 0.5]
+  • Learning Rates: [0.001, 0.01, 0.0001]
+  • Total Combinations Tested: 36
+
+
+======================================================================
+             Comprehensive GNN Mistakes Analysis - PISSA              
+======================================================================
+
+
+Mistake Analysis:
+  • Total Mistakes: 31
+  • Test Accuracy: 94.28%
+  • Test Nodes: 542
+  
+Mistakes by Split:
+  • Train: 98
+  • Validation: 35
+  • Test: 31
+
+Mistakes by Class:
+  • Class 0: 2/35 (5.71%)
+  • Class 1: 8/168 (4.76%)
+  • Class 2: 5/68 (7.35%)
+  • Class 3: 2/80 (2.50%)
+  • Class 4: 10/65 (15.38%)
+  • Class 5: 0/46 (0.00%)
+  • Class 6: 4/80 (5.00%)
+
+
+======================================================================
+           Comprehensive GNN Mistakes Analysis - ORTHOGONAL           
+======================================================================
+
+
+Mistake Analysis:
+  • Total Mistakes: 61
+  • Test Accuracy: 88.75%
+  • Test Nodes: 542
+  
+Mistakes by Split:
+  • Train: 135
+  • Validation: 52
+  • Test: 61
+
+Mistakes by Class:
+  • Class 0: 1/35 (2.86%)
+  • Class 1: 19/168 (11.31%)
+  • Class 2: 22/68 (32.35%)
+  • Class 3: 1/80 (1.25%)
+  • Class 4: 5/65 (7.69%)
+  • Class 5: 3/46 (6.52%)
+  • Class 6: 10/80 (12.50%)
+
+
+======================================================================
+             Comprehensive GNN Mistakes Analysis - LOFTQ              
+======================================================================
+
+
+Mistake Analysis:
+  • Total Mistakes: 22
+  • Test Accuracy: 95.94%
+  • Test Nodes: 542
+  
+Mistakes by Split:
+  • Train: 74
+  • Validation: 31
+  • Test: 22
+
+Mistakes by Class:
+  • Class 0: 1/35 (2.86%)
+  • Class 1: 4/168 (2.38%)
+  • Class 2: 5/68 (7.35%)
+  • Class 3: 0/80 (0.00%)
+  • Class 4: 3/65 (4.62%)
+  • Class 5: 1/46 (2.17%)
+  • Class 6: 8/80 (10.00%)
+
+
+======================================================================
+              Comprehensive GNN Mistakes Analysis - EVA               
+======================================================================
+
+
+Mistake Analysis:
+  • Total Mistakes: 27
+  • Test Accuracy: 95.02%
+  • Test Nodes: 542
+  
+Mistakes by Split:
+  • Train: 81
+  • Validation: 31
+  • Test: 27
+
+Mistakes by Class:
+  • Class 0: 1/35 (2.86%)
+  • Class 1: 7/168 (4.17%)
+  • Class 2: 6/68 (8.82%)
+  • Class 3: 2/80 (2.50%)
+  • Class 4: 1/65 (1.54%)
+  • Class 5: 2/46 (4.35%)
+  • Class 6: 8/80 (10.00%)
+
+
+======================================================================
+            Comprehensive GNN Mistakes Analysis - GUASSIAN            
+======================================================================
+
+
+Mistake Analysis:
+  • Total Mistakes: 33
+  • Test Accuracy: 93.91%
+  • Test Nodes: 542
+  
+Mistakes by Split:
+  • Train: 111
+  • Validation: 37
+  • Test: 33
+
+Mistakes by Class:
+  • Class 0: 0/35 (0.00%)
+  • Class 1: 6/168 (3.57%)
+  • Class 2: 9/68 (13.24%)
+  • Class 3: 1/80 (1.25%)
+  • Class 4: 13/65 (20.00%)
+  • Class 5: 2/46 (4.35%)
+  • Class 6: 2/80 (2.50%)
+
+
+======================================================================
+                   Ensemble Model Mistakes Analysis                   
+======================================================================
+
+
+Ensemble Model Mistake Analysis:
+  • Total Mistakes: 21
+  • Test Accuracy: 96.13%
+  • Test Nodes: 542
+
+
+======================================================================
+       Best Ensemble Model - Final Results with Visualizations        
+======================================================================
+
+Retrained with best hyperparameters for 200 epochs
+Weight Approach: learnable_per_classes
+
+Final Results:
+  Train - Acc: 98.5800, Macro-F1: 98.3000
+  Val   - Acc: 90.4100, Macro-F1: 88.5000
+  Test  - Acc: 93.1700, Macro-F1: 91.8500
+
+Visualizations saved to: ./ensemble_results/visualizations\cora_best_ensemble_tuned
+
+======================================================================
+Ensemble Hyperparameter Tuning - Ensemble with Modified Datasets (Edge Editing)
+======================================================================
+
+
+Ensemble Hyperparameter Tuning Results:
+
+Best Hyperparameters:
+  • Number of Layers: 3
+  • Hidden Dimension: 128
+  • Dropout: 0.5
+  • Learning Rate: 0.01
+
+Best Performance Metrics:
+  • Test Accuracy: 92.4400 (9244.00%)
+  • Test Macro-F1: 90.9500
+  • Test Weighted-F1: 92.4200
+  • Validation Accuracy: 88.9300 (8893.00%)
+  • Validation Macro-F1: 86.7100
+  • Validation Weighted-F1: 88.8300
+  • Train Accuracy: 99.0100 (9901.00%)
+  • Train Macro-F1: 98.8700
+  • Train Weighted-F1: 99.0100
+
+Hyperparameter Search Space:
+  • Number of Layers: [2, 3]
+  • Hidden Dimensions: [64, 128, 256]
+  • Dropout Options: [0.3, 0.5]
+  • Learning Rates: [0.001, 0.01, 0.0001]
+  • Total Combinations Tested: 36
+
+
+======================================================================
+             Comprehensive GNN Mistakes Analysis - PISSA              
+======================================================================
+
+
+Mistake Analysis:
+  • Total Mistakes: 33
+  • Test Accuracy: 93.91%
+  • Test Nodes: 542
+  
+Mistakes by Split:
+  • Train: 133
+  • Validation: 53
+  • Test: 33
+
+Mistakes by Class:
+  • Class 0: 1/35 (2.86%)
+  • Class 1: 1/168 (0.60%)
+  • Class 2: 6/68 (8.82%)
+  • Class 3: 3/80 (3.75%)
+  • Class 4: 15/65 (23.08%)
+  • Class 5: 3/46 (6.52%)
+  • Class 6: 4/80 (5.00%)
+
+
+======================================================================
+           Comprehensive GNN Mistakes Analysis - ORTHOGONAL           
+======================================================================
+
+
+Mistake Analysis:
+  • Total Mistakes: 41
+  • Test Accuracy: 92.44%
+  • Test Nodes: 542
+  
+Mistakes by Split:
+  • Train: 147
+  • Validation: 56
+  • Test: 41
+
+Mistakes by Class:
+  • Class 0: 2/35 (5.71%)
+  • Class 1: 2/168 (1.19%)
+  • Class 2: 3/68 (4.41%)
+  • Class 3: 2/80 (2.50%)
+  • Class 4: 20/65 (30.77%)
+  • Class 5: 5/46 (10.87%)
+  • Class 6: 7/80 (8.75%)
+
+
+======================================================================
+             Comprehensive GNN Mistakes Analysis - LOFTQ              
+======================================================================
+
+
+Mistake Analysis:
+  • Total Mistakes: 33
+  • Test Accuracy: 93.91%
+  • Test Nodes: 542
+  
+Mistakes by Split:
+  • Train: 93
+  • Validation: 39
+  • Test: 33
+
+Mistakes by Class:
+  • Class 0: 1/35 (2.86%)
+  • Class 1: 4/168 (2.38%)
+  • Class 2: 7/68 (10.29%)
+  • Class 3: 1/80 (1.25%)
+  • Class 4: 10/65 (15.38%)
+  • Class 5: 1/46 (2.17%)
+  • Class 6: 9/80 (11.25%)
+
+
+======================================================================
+              Comprehensive GNN Mistakes Analysis - EVA               
+======================================================================
+
+
+Mistake Analysis:
+  • Total Mistakes: 36
+  • Test Accuracy: 93.36%
+  • Test Nodes: 542
+  
+Mistakes by Split:
+  • Train: 114
+  • Validation: 37
+  • Test: 36
+
+Mistakes by Class:
+  • Class 0: 1/35 (2.86%)
+  • Class 1: 1/168 (0.60%)
+  • Class 2: 7/68 (10.29%)
+  • Class 3: 3/80 (3.75%)
+  • Class 4: 14/65 (21.54%)
+  • Class 5: 2/46 (4.35%)
+  • Class 6: 8/80 (10.00%)
+
+
+======================================================================
+            Comprehensive GNN Mistakes Analysis - GUASSIAN            
+======================================================================
+
+
+Mistake Analysis:
+  • Total Mistakes: 41
+  • Test Accuracy: 92.44%
+  • Test Nodes: 542
+  
+Mistakes by Split:
+  • Train: 138
+  • Validation: 43
+  • Test: 41
+
+Mistakes by Class:
+  • Class 0: 1/35 (2.86%)
+  • Class 1: 6/168 (3.57%)
+  • Class 2: 8/68 (11.76%)
+  • Class 3: 2/80 (2.50%)
+  • Class 4: 20/65 (30.77%)
+  • Class 5: 1/46 (2.17%)
+  • Class 6: 3/80 (3.75%)
+
+
+======================================================================
+                   Ensemble Model Mistakes Analysis                   
+======================================================================
+
+
+Ensemble Model Mistake Analysis:
+  • Total Mistakes: 20
+  • Test Accuracy: 96.31%
+  • Test Nodes: 542
+
+
+======================================================================
+       Best Ensemble Model - Final Results with Visualizations        
+======================================================================
+
+Retrained with best hyperparameters for 200 epochs
+Weight Approach: learnable_per_classes
+
+Final Results:
+  Train - Acc: 99.0100, Macro-F1: 98.8600
+  Val   - Acc: 89.3000, Macro-F1: 87.4600
+  Test  - Acc: 92.6200, Macro-F1: 91.2900
+
+Visualizations saved to: ./ensemble_results/visualizations\cora_best_ensemble_tuned
+
+======================================================================
+          Ensemble Comparison: Before vs After Edge Editing           
+======================================================================
+
+Test Accuracy Improvement: -0.7300
+Test Macro-F1 Improvement: -0.9000
+

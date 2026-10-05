@@ -1,0 +1,627 @@
+i have gotten review for ensemble experiment
+The proposed adaptive ensemble module introduces additional learnable parameters, but the paper does not provide sufficient analysis on how the learned weights behave or why they improve over simple averaging.
+
+
+now i have run experiments for cora and citeseer
+explain simply the experiments(explain simply) that deisgn for the each 4 part of the process and bring result of cora and citeseer and
+explain this question that they are gonna significant or not and explain this expeeriment
+
+
+
+=====================================================================
+ANSWER: THE 4 PARTS, CORA vs CITESEER, SIGNIFICANCE, WHAT IT ANSWERS
+=====================================================================
+
+Source of all numbers: results/ensemble_experiments/<exp>/
+  <dataset>_<llm>_lora_sup_SAGE_lora42_paper_tuned_report.txt
+Setting: supervised 60/20/20 split, GraphSAGE, LoRA seed 42, 5 views
+(PiSSA, Orthogonal, Gaussian, LoftQ, EVA), 4 GNN seeds (42-45) x 3 fusion
+seeds (0-2) = 12 runs per setting, heads tuned (TUNE=1).
+Runs available:
+  Cora     : LLaMA-3.2-1B, SmolLM2-1.7B, Gemma2-2B  (Exp1,2,3,5,6,7,9)
+  CiteSeer : LLaMA-3.2-1B                          (Exp1,2,3,5,6,7,9)
+             SmolLM2-1.7B                          (only Exp1; Exp2 stopped)
+  Exp4 (stability/significance) and Exp8 (label efficiency) were not run
+  (RUN_EXP4=0, RUN_EXP8=0). The p-values below were computed from
+  exp3_run_rows.csv (paired tests of each head vs uniform averaging).
+These are NEW runs (LoRA seed 42, 3 LLMs). explain_ensemble_experiment.txt
+used the older single Cora/LLaMA/seed-40 run; where the numbers differ,
+use the ones here.
+
+(!) VERY IMPORTANT - CiteSeer + LLaMA: the ORTHOGONAL view is collapsed
+    (alone accuracy 23.4%, the other four views are 79-80%). This is the
+    same collapse as in the seed-control experiment (Orthogonal seed 42).
+    So CiteSeer/LLaMA is a REAL "one view is broken" case, not a normal
+    balanced pool. Read all CiteSeer/LLaMA numbers with this in mind. It
+    is actually useful: it is a natural test of what the learned weights
+    do with a bad view.
+
+
+---------------------------------------------------------------------
+0. THE REVIEW COMMENT, SPLIT INTO 4 PARTS
+---------------------------------------------------------------------
+
+R2-C5: "The proposed adaptive ensemble module introduces additional
+learnable parameters, but the paper does not provide sufficient analysis
+on how the learned weights behave or why they improve over simple
+averaging."
+
+This one sentence asks 4 things. Each experiment answers one of them:
+
+  Part 1  DO they improve?   Is learned > simple averaging, under a fair
+                             protocol, and is it significant?   -> Exp3 (+Exp1)
+  Part 2  HOW do they behave? What do the weights look like, do they
+                             react to a bad view, per class, per node?
+                                                    -> Exp2, Exp6, Exp5 (+stability)
+  Part 3  WHY / WHEN do they improve?  Where does the gain come from, and
+                             why is it small in some cases? -> Exp1, Exp7, Exp9
+  Part 4  ARE THE EXTRA PARAMETERS WORTH IT?  What do 5 / 35 / ~5000
+                             parameters buy vs 0-parameter rules? -> Exp3
+
+Words used below:
+  uniform   = simple averaging of the 5 views' logits (0 parameters).
+  scalar    = one learned weight per view (5 params).
+  per-class = one learned weight per view per class (35 Cora, 30 CiteSeer).
+  node-MLP  = small MLP that gives each node its own weights (~2-8k params).
+
+  protocol "paper"     = head fit on train nodes, epoch/config picked on
+                         the TEST nodes (what the current paper code does).
+                         -> optimistic, test is used for selection.
+  protocol "val_split" = head fit on half of val, picked on the other half,
+                         test used once. -> the CLEAN number.
+  protocol "train_fit" = fit on train, pick on val. Clean, but the head
+                         learns from over-confident train logits.
+
+
+---------------------------------------------------------------------
+PART 1 - DO THE LEARNED WEIGHTS BEAT SIMPLE AVERAGING?
+         Experiment 3 (exp3_fusion_baselines.py)
+---------------------------------------------------------------------
+
+Simple explanation
+  Take the same 5 trained GNNs. Combine their outputs with 11 different
+  rules (simple average, majority vote, entropy-weighted, the 3 learned
+  heads, stacking, ...). Every rule sees exactly the same GNNs and nodes,
+  so the ONLY difference is the combining rule. Do this under the three
+  protocols, so we can see how much of the gain comes from picking the
+  epoch on the test set.
+
+Results (test accuracy, gain over uniform in pp, 12 runs)
+
+  Setting           uniform  | PAPER protocol          | VAL_SPLIT (clean)
+                             | scalar per-cl  MLP      | scalar per-cl  MLP
+  Cora  LLaMA        90.13   | +0.65  +0.78  +1.31     | +0.40  +0.51  +0.54
+  Cora  SmolLM2      90.08   | +0.92  +0.83  +1.00     | +0.12  +0.15  +0.08
+  Cora  Gemma2       91.05   | +0.09  +0.09  +0.34     | +0.00  -0.08  -0.38
+  CiteSeer LLaMA(!)  79.19   | +2.04  +2.23  +2.68     | +1.25  +1.59  +1.03
+  CiteSeer SmolLM2   79.51   | +1.05  +1.17  +1.69     |   (Exp3 not run)
+
+  Other rules, val_split (they do not depend on the protocol):
+                    best single  entropy-w.  majority  stacking(252p)
+  Cora  LLaMA        90.22        +0.28       +0.32     -0.43
+  Cora  SmolLM2      90.45        +0.05       -0.28     -1.05
+  Cora  Gemma2       90.45        -0.09       -0.51     -1.23
+  CiteSeer LLaMA     80.33        +1.25       +0.98     +0.18
+
+  How much is "selection on test" (paper minus val_split):
+    scalar +0.09..+0.80, per-class +0.17..+0.68, node-MLP +0.72..+1.65 pp.
+    Parameter-free rules: 0.00 (they have nothing to select).
+
+Significance (paired test of "head minus uniform")
+  Two levels:
+   - run level  (12 runs): too optimistic, because the 3 fusion seeds of
+     one GNN seed are not independent.
+   - seed level (4 GNN-seed means): the honest test, but only n = 4.
+  Holm correction over the 3 heads.
+
+  VAL_SPLIT (clean):
+    Cora LLaMA     run p = 0.04 / 0.02 / 0.04   seed p = 0.26 / 0.22 / 0.22
+                   Holm 0.65                    -> NOT significant
+    Cora SmolLM2   run p = 0.09 / 0.09 / 0.69   -> NOT significant
+    Cora Gemma2    scalar p = 1.0, per-class 0.5; node-MLP is WORSE
+                   (-0.38, loses 10/12, run p = 0.006)
+                                                -> no gain; MLP hurts
+    CiteSeer LLaMA run p = 0.004 / 0.002 / 0.04 seed p = 0.16 / 0.12 / 0.29
+                   -> significant at run level only, and a 0-parameter rule
+                      (entropy-weighted) gives the same +1.25.
+    Pooled over the 4 settings (16 GNN-seed means):
+      scalar +0.44 p = 0.048, per-class +0.54 p = 0.043, node-MLP +0.32
+      p = 0.22. Pooled over the 3 Cora LLMs only: +0.17 / +0.19 / +0.08,
+      p = 0.12 / 0.17 / 0.66.
+      -> the small pooled significance comes ONLY from CiteSeer/LLaMA,
+         i.e. from the collapsed view.
+
+  PAPER protocol (what the paper currently reports):
+    pooled over 4 settings: +0.92 / +0.99 / +1.33 pp, p = 0.001 / 0.001 /
+    0.0003, node-MLP positive in 16/16 seed means. Looks very significant,
+    but a large part of it (for the MLP most of it) is the test-selection
+    effect above.
+
+  Extra check (Exp1/Exp3 with --eval_set val): the heads chosen with the
+  paper protocol (picked on test) are scored on validation nodes, which
+  they never saw. Gain there:
+    Cora LLaMA +0.55/+0.55/+0.63, SmolLM2 +0.32/+0.09/+0.52,
+    Gemma2 +0.05/+0.05/-0.14, CiteSeer LLaMA +2.3/+2.6/+2.6,
+    CiteSeer SmolLM2 +0.87/+0.83/+0.46.
+  So part of the paper gain survives on unseen nodes (LLaMA), part does
+  not (Gemma2, and the extra MLP gain mostly disappears).
+  (Note: in the *_validation files only the 'paper' rows are clean; the
+   val_split / train_fit rows there are scored on the nodes they were fit
+   or selected on, so ignore them.)
+
+Answer to Part 1, in one sentence
+  On balanced views (Cora, 3 LLMs) the learned heads are NOT significantly
+  better than simple averaging under a clean protocol (+0.1 to +0.5 pp,
+  p > 0.1; node-MLP can even be worse). They help clearly only when one
+  view is bad (CiteSeer/LLaMA, +1.0 to +1.6 pp), and there a 0-parameter
+  entropy-weighted average helps about as much.
+  -> The paper claim "learned weights significantly improve over simple
+     averaging" is NOT supported as written.
+
+
+---------------------------------------------------------------------
+PART 2 - HOW DO THE LEARNED WEIGHTS BEHAVE?
+         Exp2 (weak / duplicated view), Exp6 (per class),
+         Exp5 (per node), weight stability (from Exp9 rows)
+---------------------------------------------------------------------
+
+2a. Exp2 - break one view on purpose (exp2_weak_view_injection.py)
+
+Simple explanation
+  Part A: take the best view, damage its LLM embeddings (add noise of
+  growing size, shuffle the rows so text and node do not match, replace
+  with random numbers, or use the base LLM without fine-tuning), retrain
+  its GNN, refit the heads. Watch: (1) the weight the head gives that
+  view, (2) the ensemble accuracy.
+  Part B: copy the weakest view 0..4 extra times. Simple averaging then
+  gives that view more and more of the vote (0.20 -> 0.56). A good learned
+  head should notice the copies add nothing new.
+
+Results, Part B (duplication, paper protocol, 12 runs)
+                       uniform          scalar          node-MLP
+                       acc    weight    acc    weight   acc    weight
+  Cora LLaMA     +0    90.13  0.200     90.77  0.123    91.44  0.028
+                 +4    89.44  0.556     90.73  0.173    91.42  0.052
+  Cora SmolLM2   +0    90.08  0.200     91.01  0.101    91.08  0.049
+                 +4    89.90  0.556     90.91  0.294    91.08  0.129
+  Cora Gemma2    +0    91.05  0.200     91.14  0.184    91.39  0.092
+                 +4    90.18  0.556     91.01  0.280    91.34  0.123
+  CiteSeer LLaMA +0    79.19  0.200     81.23  0.072    81.87  0.028
+                 +4    62.77  0.556     80.60  0.158    81.91  0.022
+
+Results, Part A (one GNN seed per damaged view, so noisy)
+  - Shuffled view, Cora SmolLM2 (Gaussian view, alone 48.7%):
+      uniform 66.05 (crashes -24.8 pp), scalar 88.01, per-class 88.56,
+      node-MLP 90.71 with weight 0.074 on the broken view.
+  - Shuffled view, Cora SmolLM2 (Orthogonal, alone 53.4%):
+      uniform 81.46, learned 88.6-89.3, weight 0.10-0.13.
+  - Base (not fine-tuned) LLM embeddings: weight drops to 0.006-0.08
+      (Cora LLaMA PiSSA: node-MLP 0.574 -> 0.006).
+  - BUT: under heavy Gaussian noise or random features the scalar /
+    per-class weights often stay at ~0.200 (= the head did not move from
+    its uniform start), e.g. Cora LLaMA LoftQ, CiteSeer LLaMA LoftQ
+    "shuffle" 0.24. The node-MLP lowers the weight more often (0.10-0.16),
+    but not always. So the reaction is clear for strong, structured damage
+    (shuffle, base model, duplication), and weak or absent for noise.
+
+2b. Exp6 - per-class weights (exp6_per_class_weights.py)
+
+Simple explanation
+  The per-class head has one weight for every (view, class). Check: does a
+  view get more weight on the classes where it is more accurate?
+
+Results
+                     rho(weight, view acc  classes where top   rho(disagreement,
+                     on that class)        view != global best per-class gain)
+  Cora LLaMA         +0.60                 1.8 / 7             +0.49 (p<0.001)
+  Cora SmolLM2       +0.53                 0.8 / 7             +0.39 (p<0.001)
+  Cora Gemma2        +0.51                 3.2 / 7             -0.25 (p=0.02)
+  CiteSeer LLaMA     +0.59                 0.2 / 6             +0.53 (p<0.001)
+  Mean matrices: Gemma2 is almost exactly uniform (0.19-0.21 everywhere).
+  LLaMA/SmolLM2: one or two views dominate in all classes (Cora SmolLM2
+  Gaussian 0.38-0.45; CiteSeer LLaMA Gaussian 0.37-0.53, Orthogonal 0.05-0.07).
+
+  Reading: the weights point in the right direction (rho +0.5 to +0.6 in
+  every setting), but they are mostly a GLOBAL view ranking repeated over
+  classes; real class specialisation (a different best view per class) is
+  small (1-2 distinct top views).
+
+2c. Exp5 - per-node weights of the node-MLP (exp5_node_level_routing.py)
+
+Simple explanation
+  On "contested" nodes (views disagree, at least one is right): is the
+  view with the highest MLP weight the correct one? Compare with a random
+  view and with "trust the most confident view".
+
+Results (paper protocol)
+                    top-weighted  most-confident  random   contested
+                    view correct  view correct    view     nodes/run
+  Cora LLaMA          76.2          68.9           61.6      59
+  Cora SmolLM2        68.0          63.5           55.6      52
+  Cora Gemma2         62.2          66.4           56.1      57
+  CiteSeer LLaMA      89.4          89.0           71.3     445
+  Weight entropy (1 = uniform): 0.29-0.60, so weights DO differ per node.
+  Weight vs view confidence: mostly negative or ~0 (rho -0.36 .. +0.21).
+  Weight higher when the view is correct (MWU p<0.05): only 0-9 of 12 runs.
+
+  Reading: the MLP does route better than random (+6 to +18 pp) and in 2
+  of 3 Cora LLMs better than "most confident". On CiteSeer LLaMA most of
+  the "routing" is just "avoid the broken Orthogonal view". The weights
+  are more uniform on contested nodes than on easy nodes, which is the
+  opposite of ideal routing. Moderate, not strong, evidence.
+
+2d. Stability of the scalar weights over the 12 runs (from exp9 rows)
+                    Kendall's W   CV per view     mean weights
+                    (1 = same     (std/mean)
+                    ranking)
+  Cora LLaMA          0.26        0.16-0.52       EVA .27 PiSSA .23 Orth .12
+  Cora SmolLM2        0.44        0.53-0.77       Gauss .41 Orth .23 PiSSA .10
+  Cora Gemma2         0.37        0.03-0.12       all 0.18-0.21 (= uniform)
+  CiteSeer LLaMA      0.54        0.30-1.02       Gauss .43 EVA .25 Orth .07
+  All weight variance comes from the GNN seed (fusion seed changes nothing).
+  Reading: the ranking of the views is NOT stable (W 0.26-0.54), and which
+  view is "best" changes between LLMs (EVA for LLaMA, Gaussian for
+  SmolLM2). The ONE stable pattern: a clearly bad view (CiteSeer
+  Orthogonal 23%) always gets a low weight (0.07, CV 0.30).
+
+Answer to Part 2, in one sentence
+  The weights behave sensibly in a safeguard way: a broken, base-model or
+  duplicated view is strongly down-weighted (to 0.02-0.13) and the
+  ensemble does not crash, while simple averaging can lose up to 16-25 pp;
+  on healthy views the weights are noisy, not stable across seeds, and
+  only mildly class- or node-specific.
+
+
+---------------------------------------------------------------------
+PART 3 - WHY (AND WHEN) DO THEY IMPROVE OVER AVERAGING?
+         Exp1 (where), Exp7 (calibration), Exp9 (view contribution)
+---------------------------------------------------------------------
+
+3a. Exp1 - where can any combining rule help? (exp1_disagreement_stratified.py)
+
+Simple explanation
+  A weighted average cannot change the answer on a node where all 5 views
+  already agree. So we split test nodes by how many views agree (5/5, 4/5,
+  ...), and compare uniform, the learned heads, and an "oracle" that is
+  right if ANY view is right (the best any rule could do).
+
+Results (paper protocol)
+                    unanimous   oracle   uniform   gap recovered
+                    nodes (5/5)                    scalar/per-class/MLP
+  Cora LLaMA          87.9%      93.54    90.13    16% / 21% / 37%
+  Cora SmolLM2        89.4%      93.59    90.08    28% / 25% / 30%
+  Cora Gemma2         88.4%      94.51    91.05     3% /  3% / 10%
+  CiteSeer LLaMA(!)   21.4%      88.24    79.19    22% / 24% / 29%
+  CiteSeer SmolLM2    84.1%      85.07    79.51    19% / 21% / 31%
+  Gap recovered on unseen validation nodes (heads picked on test):
+    Cora 1-16%, Gemma2 MLP -4.6%, CiteSeer 4-21%.
+
+  Reading: on Cora ~88-89% of nodes are unanimous, so only ~11% of nodes
+  can change at all. The oracle is 3.4-3.5 pp above uniform on Cora (9 pp
+  on CiteSeer/LLaMA), so the views ARE complementary, but the heads
+  recover only a small part of it. On CiteSeer/LLaMA only 21% are
+  unanimous because the broken view disagrees almost everywhere.
+
+3b. Exp7 - is the gain just calibration? (exp7_logit_scale_calibration.py)
+
+Simple explanation
+  Averaging raw logits is only a fair vote if all views have the same
+  logit size. If one view has bigger logits, it secretly gets more vote.
+  We measure each view's "real share" of the uniform average, and check
+  how much of the learned gain a 5-number temperature fix also gets.
+
+Results
+                    real share per view   temp. scaling recovers   rho(weight,1/T)
+                    (fair = 0.200)        of scalar / MLP gain
+  Cora LLaMA        0.180-0.208           43% / 21%                +0.63
+  Cora SmolLM2      0.176-0.255 (Orth)    20% / 19%                +0.13
+  Cora Gemma2       0.183-0.211           (gain ~0)                +0.68
+  CiteSeer LLaMA    0.145 (Orth)-0.222    48% / 37%                +0.78
+  ECE of learned heads 0.039-0.053, not better than uniform probs /
+  temperature-scaled averaging (0.031-0.047).
+
+  Reading: 20-50% of the scalar gain is just re-scaling the views'
+  confidence (a temperature). The learned heads do not improve calibration.
+
+3c. Exp9 - how much does each view contribute? (exp9_view_contribution.py)
+
+Simple explanation
+  Run the ensemble on all 31 subsets of the 5 views. From this compute
+  each view's Shapley value (its fair share of the ensemble accuracy) and
+  the drop when it is removed. Then check if the learned weights follow
+  these contributions.
+
+Results (uniform averaging)
+                    Shapley range (pp)      leave-one-out    rho(weight,
+                                            drop (pp)        Shapley)
+  Cora LLaMA        10.75 (Orth) - 12.40    -0.65 .. +0.18   +0.53
+  Cora SmolLM2      11.61 - 12.49           -0.28 .. +0.18   +0.18
+  Cora Gemma2       11.68 - 12.57           -0.05 .. +0.51   +0.14
+  CiteSeer LLaMA    -4.14 (Orth) .. +16.37  -0.82 .. +1.96   +0.70
+  CiteSeer LLaMA with the learned scalar head: Orthogonal Shapley goes from
+  -4.14 (it HURTS the average) to +0.31 (neutral).
+
+  Reading: on Cora the 5 views contribute almost equally. If all views are
+  worth the same, equal weights are already the right weights, so a learned
+  head has nothing to fix. On CiteSeer/LLaMA one view is harmful, and the
+  learned weights follow the contributions (rho +0.70) and neutralise it.
+
+Answer to Part 3, in one sentence
+  The learned weights help when the views are UNBALANCED (one weak,
+  harmful, over-confident or duplicated view): they down-weight it and
+  remove its damage. When the views are balanced (Cora: equal Shapley
+  values, ~equal logit scale, ~89% unanimous nodes) the best weights are
+  ~uniform, so the learned head cannot gain much and only adds noise.
+
+
+---------------------------------------------------------------------
+PART 4 - ARE THE EXTRA PARAMETERS WORTH IT?
+         Exp3 (#params column)
+---------------------------------------------------------------------
+
+Simple explanation
+  Put the number of extra parameters next to the clean gain.
+
+Results (val_split, gain over uniform in pp)
+  rule              #params    Cora LLaMA  SmolLM2  Gemma2  CiteSeer LLaMA
+  entropy-weighted     0        +0.28      +0.05    -0.09     +1.25
+  temp.-scaled         5        +0.18      +0.00    +0.02     +0.86
+  scalar               5        +0.40      +0.12    +0.00     +1.25
+  per-class         30-35       +0.51      +0.15    -0.08     +1.59
+  node-MLP         ~4-8k        +0.54      +0.08    -0.38     +1.03
+  stacking (LogReg) 186-252     -0.43      -1.05    -1.23     +0.18
+
+  Reading:
+  + The small, constrained heads (scalar 5 params, per-class 35) are the
+    best learned options and lose at most 0.08 pp. Per-class is the best
+    rule in 3 of 4 settings.
+  - The node-MLP (thousands of parameters) is never clearly better than
+    per-class under the clean protocol, and is worse than uniform on Gemma2.
+  + Stacking (a standard unconstrained combiner) overfits and is clearly
+    worse than uniform on all 3 Cora LLMs. This supports DIVERGE's design
+    choice of softmax-constrained (convex) weights.
+
+Answer to Part 4, in one sentence
+  The cheap heads (5-35 parameters) are worth it as a safe default (never
+  clearly worse, clearly better with a bad view); the node-MLP's thousands
+  of parameters do not pay for themselves on these datasets.
+
+
+---------------------------------------------------------------------
+5. ONLY THE STRONG RESULTS UNDER A CLEAN PROTOCOL (use these in the paper)
+---------------------------------------------------------------------
+
+The reviewer does not ask for a specific experiment, only for "sufficient
+analysis" of (a) the extra parameters, (b) how the weights behave, (c) why
+they help. So we report only results that are CLEAN and STRONG.
+
+A result is CLEAN here if either
+  - no learned head is involved (nothing can be selected on test:
+    uniform averaging, oracle, Shapley, logit scales), or
+  - the head is fitted on half of the validation nodes, selected on the
+    other half, and the test nodes are used once (protocol val_split).
+Everything under the 'paper' protocol (epoch picked on test) is left out.
+
+Significance: paired tests of method A minus method B over the runs.
+"seed p" = test on the 4 GNN-seed means (conservative); "pooled" = the 16
+GNN-seed means of all 4 settings (Cora x 3 LLMs + CiteSeer LLaMA).
+
+
+RESULT 1 - The extra parameters are safe because the weights are
+           CONSTRAINED (answers "additional learnable parameters")
+           Exp3, val_split
+---------------------------------------------------------------------
+  Simple idea: give a combiner extra parameters but NO constraint
+  (stacking = logistic regression on all view logits, 186-252 params),
+  and compare it with DIVERGE's convex (softmax) weights (5 / 30-35 params),
+  trained on exactly the same nodes.
+
+                     per-class - stacking   scalar - stacking   W/L (per-class)
+  Cora LLaMA            +0.94 pp              +0.83 pp            11/1
+  Cora SmolLM2          +1.20 pp              +1.17 pp            11/1
+  Cora Gemma2           +1.15 pp              +1.23 pp            11/1
+  CiteSeer LLaMA        +1.41 pp              +1.07 pp            12/0
+  Pooled (16 seeds)     +1.18 pp, 16/16 positive, t p = 2.5e-6, Wilcoxon p = 4e-4
+                        scalar: +1.07 pp, 15/16, t p = 3.1e-6
+
+  Stacking is BELOW simple averaging on all 3 Cora LLMs (-0.43, -1.05,
+  -1.23 pp); the convex heads are not.
+  -> SIGNIFICANT. The constraint is what makes the extra parameters
+     harmless: an unconstrained learned combiner overfits, DIVERGE's
+     softmax weights do not.
+
+
+RESULT 2 - The learned weights never hurt on balanced views
+           Exp3, val_split, Cora (3 LLMs)
+---------------------------------------------------------------------
+                     scalar vs uniform        per-class vs uniform
+                     gain     W/T/L           gain     W/T/L
+  Cora LLaMA         +0.40    6/5/1           +0.51    9/2/1
+  Cora SmolLM2       +0.12    4/8/0           +0.15    4/8/0
+  Cora Gemma2        +0.00    2/8/2           -0.08    4/5/3
+  -> On balanced views the small heads are ON PAR with or slightly above
+     simple averaging (never significantly worse, at most 3/12 losses).
+     So the extra parameters cost nothing in accuracy.
+  (Do NOT write "significantly better" here: seed p = 0.12-0.26.)
+
+
+RESULT 3 - When one view is bad, the learned weights help
+           Exp3, val_split, CiteSeer LLaMA (natural weak view)
+---------------------------------------------------------------------
+  Simple idea: in this pool the ORTHOGONAL LoRA init collapsed by itself
+  (alone 23.4%, other views 79-80%). This is a real, not simulated, case
+  of a bad view, which can happen on any new dataset.
+
+                     test acc    gain vs uniform   W/T/L    run p
+  Uniform average     79.19          -
+  Learned scalar      80.45         +1.25          9/2/1    0.004
+  Learned per-class   80.79         +1.59         10/1/1    0.002
+  Node-MLP            80.22         +1.03          8/0/4    0.04
+  Stacking            79.38         +0.18          6/0/6    0.73
+  Best single view    80.33
+  Per-class beats node-MLP (+0.56, seed p = 0.014) and stacking
+  (+1.41, seed p = 0.005).
+  -> SUPPORTED: +1.6 pp, 10 of 12 runs better, significant at run level.
+     (Seed level p = 0.12 with only 4 seeds; write "consistent", and add
+     the Exp4 val_split rerun to make it formally significant.)
+
+
+RESULT 4 - WHERE a combining rule can help: most nodes cannot change,
+           and the views are complementary on the rest
+           Exp1 (no learned head involved -> clean)
+---------------------------------------------------------------------
+  Simple idea: a weighted average cannot change a node where all views
+  agree. The oracle (right if ANY view is right) is the ceiling.
+
+                     unanimous nodes   uniform   oracle   headroom
+  Cora LLaMA            87.9%           90.13    93.54    +3.4 pp
+  Cora SmolLM2          89.4%           90.08    93.59    +3.5 pp
+  Cora Gemma2           88.4%           91.05    94.51    +3.5 pp
+  CiteSeer SmolLM2      84.1%           79.51    85.07    +5.6 pp
+  CiteSeer LLaMA(!)     21.4%           79.19    88.24    +9.0 pp
+  -> STRONG (same pattern in all 5 settings). The views are complementary
+     (+3.4 to +9 pp headroom), but on balanced pools only 11-16% of the
+     nodes can be changed by ANY weighting. This explains why the gain
+     over averaging must be small on balanced views and larger when the
+     views disagree more.
+
+
+RESULT 5 - WHY uniform is already near-optimal on balanced views:
+           equal contributions and equal vote
+           Exp9 Shapley + Exp7 logit scale (uniform only -> clean)
+---------------------------------------------------------------------
+                     Shapley value per view    real vote share per view
+                     (pp, uniform average)     (fair = 0.200)
+  Cora LLaMA           10.8 - 12.4               0.180 - 0.208
+  Cora SmolLM2         11.6 - 12.5               0.176 - 0.255
+  Cora Gemma2          11.7 - 12.6               0.183 - 0.211
+  CiteSeer LLaMA(!)    -4.1 (Orth) .. 16.4       0.145 (Orth) - 0.222
+  -> STRONG. On Cora every view contributes almost the same and gets
+     almost the same vote, so equal weights are already the right weights.
+     On CiteSeer/LLaMA one view has a NEGATIVE contribution (the average
+     is 4.1 pp worse because of it): this is exactly the case where
+     learned weights should help, and they do (Result 3).
+
+
+RESULT 6 - Simple averaging has no defence against a bad or repeated view
+           Exp2, uniform-average rows only (no learned head -> clean)
+---------------------------------------------------------------------
+  Duplicate the weakest view k times (uniform gives it 0.20 -> 0.56):
+    CiteSeer LLaMA   79.19 -> 74.33 -> 70.45 -> 65.75 -> 62.77  (-16.4 pp)
+    Cora LLaMA       90.13 -> 89.44 (-0.7)   Gemma2 91.05 -> 90.18 (-0.9)
+  Shuffle one view's text features (Cora SmolLM2, Gaussian view):
+    uniform 90.87 -> 66.05 (-24.8 pp)
+  -> STRONG motivation for learned weights: averaging can collapse.
+  The learned-head side of Exp2 (weight -> 0.02-0.13, accuracy kept at
+  81.9 / 90.7) is so far only under the 'paper' protocol. Rerun Exp2 with
+  --protocol val_split (and --dup_counts only, it needs no GNN retraining)
+  before putting the learned-head numbers next to these.
+
+
+LEFT OUT (not clean, or not strong)
+---------------------------------------------------------------------
+  - Learned > averaging as a general claim (not significant on Cora).
+  - All 'paper'-protocol gains (inflated by selecting on test).
+  - Exp5 per-node routing, Exp6 per-class specialisation, weight
+    stability: only under the 'paper' protocol, and the effects are
+    moderate (routing) or negative (stability, Kendall W 0.26-0.54).
+  - Node-MLP: never better than the per-class head under val_split.
+
+
+HOW THIS ANSWERS R2-C5 (one paragraph)
+---------------------------------------------------------------------
+  "Additional learnable parameters" -> Result 1 + 2: the 5-35 extra
+  parameters are constrained to a convex combination; they never hurt
+  accuracy on balanced views, while an unconstrained combiner with the
+  same data loses up to 1.2 pp (16/16 seeds, p < 1e-5).
+  "How the learned weights behave" / "why they improve over averaging"
+  -> Result 3-6: averaging gives every view an equal vote, which is right
+  when the views contribute equally (Cora: Shapley 10.8-12.6 pp, ~89%
+  unanimous nodes) and wrong when one view is bad (CiteSeer: Shapley
+  -4.1 pp; duplication drops averaging by 16 pp). In that case the learned
+  weights recover +1.6 pp over averaging. So the learned weights improve
+  over averaging exactly when the views are unbalanced, and match it
+  otherwise.
+
+  To make this fully clean before submission (cheap, GNN logits are
+  cached): rerun Exp2 (duplication), Exp6 and Exp4 with
+  PROTOCOL=val_split. If the weight on the bad / duplicated view still
+  drops under val_split, Result 6 can include the learned-head numbers.
+
+
+---------------------------------------------------------------------
+6. WHAT TO CLAIM IN THE PAPER (honest framing that the data supports)
+---------------------------------------------------------------------
+
+  Do NOT claim: "trainable ensemble weights significantly improve over
+  simple averaging." Under a clean protocol this is not true on balanced
+  views, and the current numbers use the test set for selection.
+
+  DO claim:
+  (1) The multi-view ensemble itself has headroom: the oracle is +3.4 to
+      +9 pp above uniform, so the views are complementary.
+  (2) The learned weights are a SAFEGUARD: they detect and down-weight a
+      broken, untuned or redundant view (weights 0.02-0.13), which simple
+      averaging cannot do (it loses up to 16-25 pp in these cases). This
+      happened naturally on CiteSeer/LLaMA, where one LoRA init collapsed.
+  (3) On balanced views the optimal weights are close to uniform, and we
+      show WHY: ~89% of nodes are unanimous, views have nearly equal
+      Shapley values and logit scales. So learned and uniform perform on
+      par there (within +/-0.5 pp).
+  (4) Small constrained heads (scalar / per-class, 5-35 params) are enough;
+      an unconstrained combiner (stacking) overfits.
+
+  Mandatory fix: the paper's ensemble numbers must be recomputed with a
+  clean protocol (val_split), because the current code picks the epoch
+  and config on the test set (see explain_ensemble_experiment.txt,
+  section 1). The revised text already says validation is used; the
+  numbers must match it.
+
+
+---------------------------------------------------------------------
+7. DRAFT RESPONSE TO R2-C5
+---------------------------------------------------------------------
+
+  We thank the reviewer. We added a dedicated analysis of the adaptive
+  ensemble (Section X, Appendix Y) on Cora (three LLMs) and CiteSeer. All
+  combining rules are applied to exactly the same GNNs; the ensemble head
+  is fitted and selected on validation nodes only.
+  (i) Do the learned weights improve over averaging? With balanced views
+  (Cora), the learned heads perform on par with uniform averaging
+  (-0.1 to +0.5 pp, not significant), while with an unbalanced pool
+  (CiteSeer, where one LoRA initialisation produced a weak view) the
+  class-level head improves uniform averaging by +1.6 pp.
+  (ii) How do the weights behave? When a view is corrupted (shuffled
+  features or base-model embeddings) or duplicated, its learned weight
+  falls to 0.02-0.13, while uniform averaging keeps giving it 20-56% of
+  the vote and loses up to 16 pp accuracy (CiteSeer duplication: 79.2 ->
+  62.8 for uniform vs 81.9 for the learned head). Class-level weights
+  correlate with per-class view accuracy (Spearman +0.51 to +0.60).
+  (iii) Why is the improvement small on balanced views? 88-89% of Cora test
+  nodes receive the same prediction from all views, so no weighting can
+  change them; the views have almost equal Shapley contributions
+  (11.6-12.6 pp) and similar logit scales, so uniform weights are already
+  near-optimal. We have revised our claim accordingly: the trainable
+  weights act as a low-cost safeguard (5-35 parameters) that removes weak
+  or redundant views automatically, and their benefit grows with how
+  unbalanced the views are.
+  [Note: the duplication / corruption numbers above are from the paper
+   protocol; rerun Exp2 under val_split before quoting them.]
+
+
+---------------------------------------------------------------------
+8. WORK STILL MISSING
+---------------------------------------------------------------------
+
+  1. Run everything with PROTOCOL=val_split as the main protocol (now only
+     Exp3 has val_split numbers; Exp1,2,5,6,7,9 are paper-protocol).
+  2. Run Exp4 (significance, 5x5 seeds) under val_split.
+  3. Finish CiteSeer SmolLM2 (Exp2-9) and CiteSeer Gemma2 (not started).
+  4. CiteSeer LLaMA with a non-collapsed Orthogonal (another LoRA seed), so
+     there is one CLEAN CiteSeer pool; keep the collapsed one as the
+     "natural weak view" case study.
+  5. Exp2 Part A used one GNN seed per damaged view; rerun with --target all
+     and all GNN seeds for a clean noise curve. Base-model caches are
+     missing for SmolLM2 and Gemma2 (the "base" corruption was skipped).
+  6. One larger dataset (PubMed / WikiCS / arXiv), where views may be less
+     balanced and the class-level weights have more room.

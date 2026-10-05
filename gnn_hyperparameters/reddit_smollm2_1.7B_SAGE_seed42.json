@@ -1,0 +1,80 @@
+{
+    "seed": 42,
+    "device": 1,
+    "dataset": "reddit",
+    "gnn_model_name": "SAGE",
+    "llm_name": "smollm2_1.7B",
+    "epochs": 200,
+    "early_stop": 20,
+    "re_split": 1,
+    "lr": 0.0001,
+    "hidden_dim": 512,
+    "num_layers": 3,
+    "dropout": 0.1,
+    "weight_decay": 0.01,
+    "batch_norm": 1,
+    "tuning": {
+        "init_weight_approach": "eva",
+        "peft_type": "lora",
+        "embedding_cache": "artifacts\\cache\\smollm2_1.7B_reddit_seqcls_lora_init-eva_pool-mean_seed42_semi_supervised.pt",
+        "trial_log": "results\\gnn_tuning\\reddit_smollm2_1.7B_SAGE_supervised_seed42_init-eva\\trials.jsonl",
+        "search_space": {
+            "learning_rate": [
+                0.01,
+                0.005,
+                0.001,
+                0.0001
+            ],
+            "hidden_dim": [
+                128,
+                256,
+                512,
+                1024
+            ],
+            "num_layers": [
+                2,
+                3
+            ],
+            "dropout": [
+                0.0,
+                0.1,
+                0.01,
+                0.5
+            ],
+            "weight_decay": [
+                0.0,
+                0.01
+            ],
+            "batch_norm": [
+                0,
+                1
+            ]
+        },
+        "val_acc": 66.20666666666666,
+        "val_acc_std": 0.20757863302587007,
+        "test_acc": 67.32000000000001,
+        "test_acc_std": 0.10033277962194598,
+        "val_f1": 66.08333333333333,
+        "test_f1": 67.24333333333333,
+        "val_acc_per_seed": [
+            65.93,
+            66.43,
+            66.26
+        ],
+        "test_acc_per_seed": [
+            67.37,
+            67.18,
+            67.41
+        ],
+        "eval_seeds": [
+            42,
+            1042,
+            2042
+        ],
+        "n_candidates": 512,
+        "n_promoted": 16,
+        "search": "random",
+        "total_time_sec": 0.0,
+        "timestamp": "2026-10-01 22:24:48"
+    }
+}

@@ -1,0 +1,622 @@
+{
+  "created": "2026-09-26T18:02:25",
+  "host": "DESKTOP-KD62AOJ",
+  "git_commit": "8115bee489c2dff32d940b062d5ad44a4ab64c1c",
+  "versions": {
+    "python": "3.13.5",
+    "numpy": "2.3.2",
+    "torch": "2.7.1+cu128"
+  },
+  "seeds": [
+    42,
+    43,
+    44,
+    45
+  ],
+  "splits": [
+    0,
+    1
+  ],
+  "datasets": {
+    "arxiv": {
+      "config_seed": 50,
+      "num_nodes": 169343,
+      "files": {
+        "arxiv_split1_seed42.npz": {
+          "split": 1,
+          "seed": 42,
+          "sizes": [
+            101605,
+            33869,
+            33869
+          ],
+          "sha256": "8e398fb7078a9391a84dde0c03aae33c90606a219df5c2593a21eedda8248d41"
+        },
+        "arxiv_split1_seed43.npz": {
+          "split": 1,
+          "seed": 43,
+          "sizes": [
+            101605,
+            33869,
+            33869
+          ],
+          "sha256": "48516e51eeb41656bac43ff7389640d9b8e3d3175ec74a09cc7c586ebed51607"
+        },
+        "arxiv_split1_seed44.npz": {
+          "split": 1,
+          "seed": 44,
+          "sizes": [
+            101605,
+            33869,
+            33869
+          ],
+          "sha256": "1f367087a152826cedab8fdb4fe6507552df69940f5e02e53b9758126359f45c"
+        },
+        "arxiv_split1_seed45.npz": {
+          "split": 1,
+          "seed": 45,
+          "sizes": [
+            101605,
+            33869,
+            33869
+          ],
+          "sha256": "bc709ba7d74c023e91d131ce800e9f5b58698d06e6a54ec6ca672af58a146f60"
+        },
+        "arxiv_split1_seed50.npz": {
+          "split": 1,
+          "seed": 50,
+          "sizes": [
+            101605,
+            33869,
+            33869
+          ],
+          "sha256": "8a5d6d2f8f809d3ab83a8b628a05450d106b75a8d1774fc0bdd7984b776c3de5"
+        }
+      }
+    },
+    "citeseer": {
+      "config_seed": 44,
+      "num_nodes": 3186,
+      "files": {
+        "citeseer_split1_seed42.npz": {
+          "split": 1,
+          "seed": 42,
+          "sizes": [
+            1911,
+            637,
+            638
+          ],
+          "sha256": "d04460ab27dad239cb6cb3ce09ee556734a27cd9a661a8c6c5ef137acf84f611"
+        },
+        "citeseer_split1_seed43.npz": {
+          "split": 1,
+          "seed": 43,
+          "sizes": [
+            1911,
+            637,
+            638
+          ],
+          "sha256": "d76fa000e495874f71cff90ed114616688a9ebb6b3450e858a4dafcb4edde295"
+        },
+        "citeseer_split1_seed44.npz": {
+          "split": 1,
+          "seed": 44,
+          "sizes": [
+            1911,
+            637,
+            638
+          ],
+          "sha256": "8319a8787c99493846a47561f349a966841b47cb7e287edfd3c7ec198aed1886"
+        },
+        "citeseer_split1_seed45.npz": {
+          "split": 1,
+          "seed": 45,
+          "sizes": [
+            1911,
+            637,
+            638
+          ],
+          "sha256": "461701e991a6391846cb8b1990f945e2b010ecdd5bff6e57d08d60671f98bb37"
+        }
+      }
+    },
+    "computer": {
+      "config_seed": 42,
+      "num_nodes": 87229,
+      "files": {
+        "computer_split0_seed42.npz": {
+          "split": 0,
+          "seed": 42,
+          "sizes": [
+            8722,
+            8723,
+            52338
+          ],
+          "sha256": "d36141b3ba9cde52258c93684e94216165d84778d260cd4061bd878803bdab14"
+        },
+        "computer_split0_seed43.npz": {
+          "split": 0,
+          "seed": 43,
+          "sizes": [
+            8722,
+            8723,
+            52338
+          ],
+          "sha256": "49708da9c7866834a88f3fd3af4271fd210bfeb3ce353ddba5d8e63cabfc9266"
+        },
+        "computer_split0_seed44.npz": {
+          "split": 0,
+          "seed": 44,
+          "sizes": [
+            8722,
+            8723,
+            52338
+          ],
+          "sha256": "c9986fe24acf644da79a8def5cfec805fb20ec2da428e7b940c2d98b3d3c79b0"
+        },
+        "computer_split0_seed45.npz": {
+          "split": 0,
+          "seed": 45,
+          "sizes": [
+            8722,
+            8723,
+            52338
+          ],
+          "sha256": "9caa29a9554cfb05c3cafbc94aa47a0502e2a707266eb78645c920fd45663a9d"
+        },
+        "computer_split1_seed42.npz": {
+          "split": 1,
+          "seed": 42,
+          "sizes": [
+            52337,
+            17446,
+            17446
+          ],
+          "sha256": "68ea453e0812be838d4dea6f1a2a7399bc8effb64b7fdab84a96abe581574736"
+        },
+        "computer_split1_seed43.npz": {
+          "split": 1,
+          "seed": 43,
+          "sizes": [
+            52337,
+            17446,
+            17446
+          ],
+          "sha256": "bf521ec660a76cf993e6e21bc06aeb17ec21bdfd3508c31e1b8ecb1cac088f23"
+        },
+        "computer_split1_seed44.npz": {
+          "split": 1,
+          "seed": 44,
+          "sizes": [
+            52337,
+            17446,
+            17446
+          ],
+          "sha256": "5637a4c749f34400e2bf4c34b724545604cfa99a9de22b147ac5620e91d239fe"
+        },
+        "computer_split1_seed45.npz": {
+          "split": 1,
+          "seed": 45,
+          "sizes": [
+            52337,
+            17446,
+            17446
+          ],
+          "sha256": "f4415ef1d71215ee666c610a64dfcb6a89fe179edf7beb2b47eb8b886f466f07"
+        }
+      }
+    },
+    "cora": {
+      "config_seed": 40,
+      "num_nodes": 2708,
+      "files": {
+        "cora_split1_seed42.npz": {
+          "split": 1,
+          "seed": 42,
+          "sizes": [
+            1624,
+            542,
+            542
+          ],
+          "sha256": "210c1cb7e4a8144a753533576b46a61d0522520c2b0e244a6a6fd235b7d406a5"
+        },
+        "cora_split1_seed43.npz": {
+          "split": 1,
+          "seed": 43,
+          "sizes": [
+            1624,
+            542,
+            542
+          ],
+          "sha256": "5f6a99e1b50d265f012c20ce7c062e0fc5f9299b918abfa7ca73068513a09166"
+        },
+        "cora_split1_seed44.npz": {
+          "split": 1,
+          "seed": 44,
+          "sizes": [
+            1624,
+            542,
+            542
+          ],
+          "sha256": "b91c3a39619159aeb798a4544d97133d9a58b5656f69ef8bf2d1a522221aae8f"
+        },
+        "cora_split1_seed45.npz": {
+          "split": 1,
+          "seed": 45,
+          "sizes": [
+            1624,
+            542,
+            542
+          ],
+          "sha256": "19dc69516a2953c49c56a6b90ab29b86fe908505c07bad8c6b902865693f70ef"
+        },
+        "cora_split1_seed40.npz": {
+          "split": 1,
+          "seed": 40,
+          "sizes": [
+            1624,
+            542,
+            542
+          ],
+          "sha256": "d08fa15a433e94454f38ca10e0811b2560432142156366d5ed0a2f3111bcb4ba"
+        }
+      }
+    },
+    "history": {
+      "config_seed": null,
+      "num_nodes": 41551,
+      "files": {
+        "history_split0_seed42.npz": {
+          "split": 0,
+          "seed": 42,
+          "sizes": [
+            4155,
+            4155,
+            24930
+          ],
+          "sha256": "d2c1b1f9d5234356abf2a921183d347b13fdb70bd80d1b6cb32ce397867135ce"
+        },
+        "history_split0_seed43.npz": {
+          "split": 0,
+          "seed": 43,
+          "sizes": [
+            4155,
+            4155,
+            24930
+          ],
+          "sha256": "c88a0b62608ff2ab7afa3338865a9aae8062bbf2e2e2f95effd342422c30334a"
+        },
+        "history_split0_seed44.npz": {
+          "split": 0,
+          "seed": 44,
+          "sizes": [
+            4155,
+            4155,
+            24930
+          ],
+          "sha256": "b9adfa4d88e965377288c6955fd354126b94ac32a7d4dfab815c42d85dff3173"
+        },
+        "history_split0_seed45.npz": {
+          "split": 0,
+          "seed": 45,
+          "sizes": [
+            4155,
+            4155,
+            24930
+          ],
+          "sha256": "5ebe9f02e2129bc0875f1ce6bebbbcb4539989eb597bc4027a239c7e515c126a"
+        },
+        "history_split1_seed42.npz": {
+          "split": 1,
+          "seed": 42,
+          "sizes": [
+            24930,
+            8310,
+            8311
+          ],
+          "sha256": "118c7408fa5d94377e6b9619811b2e518fedb9f69bfdf1c0125883adb67f1466"
+        },
+        "history_split1_seed43.npz": {
+          "split": 1,
+          "seed": 43,
+          "sizes": [
+            24930,
+            8310,
+            8311
+          ],
+          "sha256": "9f1d68075c906134cabb5a00a4efeade9c978e884ea12663fce36c7da141487d"
+        },
+        "history_split1_seed44.npz": {
+          "split": 1,
+          "seed": 44,
+          "sizes": [
+            24930,
+            8310,
+            8311
+          ],
+          "sha256": "2c874743219c976fe316b723f0f0a25b825b41219040508a72b465f68a7a3e92"
+        },
+        "history_split1_seed45.npz": {
+          "split": 1,
+          "seed": 45,
+          "sizes": [
+            24930,
+            8310,
+            8311
+          ],
+          "sha256": "de728acc4291459089b92ca9aff52cae42bf6adce49dddd8d97cb408e36ddda5"
+        }
+      }
+    },
+    "instagram": {
+      "config_seed": 42,
+      "num_nodes": 11339,
+      "files": {
+        "instagram_split1_seed42.npz": {
+          "split": 1,
+          "seed": 42,
+          "sizes": [
+            6803,
+            2268,
+            2268
+          ],
+          "sha256": "3c182517ff3af122ded8066fef6d54f548ee6bf04af93a47ac1b62444a7d8635"
+        },
+        "instagram_split1_seed43.npz": {
+          "split": 1,
+          "seed": 43,
+          "sizes": [
+            6803,
+            2268,
+            2268
+          ],
+          "sha256": "7804312a967ecfce9f28b7800e1acd0c110417da210f890f8fdf539aeb283429"
+        },
+        "instagram_split1_seed44.npz": {
+          "split": 1,
+          "seed": 44,
+          "sizes": [
+            6803,
+            2268,
+            2268
+          ],
+          "sha256": "347896d6cafc6eea43fbe245db4f2a736bbf8ce8f290f8cf2560a87e888a535b"
+        },
+        "instagram_split1_seed45.npz": {
+          "split": 1,
+          "seed": 45,
+          "sizes": [
+            6803,
+            2268,
+            2268
+          ],
+          "sha256": "33a1ba7e01c57f5001b8930a29d0418e4127c253188c12743c5ea4cb340f9a6f"
+        }
+      }
+    },
+    "photo": {
+      "config_seed": null,
+      "num_nodes": 48362,
+      "files": {
+        "photo_split0_seed42.npz": {
+          "split": 0,
+          "seed": 42,
+          "sizes": [
+            4836,
+            4836,
+            29017
+          ],
+          "sha256": "2cdd86bacf79b5fc58ac5bad7f1fd7c86d890234adbc11d90372b232e244f7d4"
+        },
+        "photo_split0_seed43.npz": {
+          "split": 0,
+          "seed": 43,
+          "sizes": [
+            4836,
+            4836,
+            29017
+          ],
+          "sha256": "31084967a43e8310be14abf3ba28f6dc147d6729dcd856e80e27057df62d5004"
+        },
+        "photo_split0_seed44.npz": {
+          "split": 0,
+          "seed": 44,
+          "sizes": [
+            4836,
+            4836,
+            29017
+          ],
+          "sha256": "5664b24cf9b2fa880f4b5715c6df45655ae17153713fc0d4a354ea2a85df007d"
+        },
+        "photo_split0_seed45.npz": {
+          "split": 0,
+          "seed": 45,
+          "sizes": [
+            4836,
+            4836,
+            29017
+          ],
+          "sha256": "1f6e9afe8d79b01e809eb890b2d4abc45b8ce6749c3740b0cb236c45c055459a"
+        },
+        "photo_split1_seed42.npz": {
+          "split": 1,
+          "seed": 42,
+          "sizes": [
+            29017,
+            9672,
+            9673
+          ],
+          "sha256": "74ed9b9fc6d4cc6d4c2b5a44f1505cc0bc7b058b565e0d537c64a887812d95dc"
+        },
+        "photo_split1_seed43.npz": {
+          "split": 1,
+          "seed": 43,
+          "sizes": [
+            29017,
+            9672,
+            9673
+          ],
+          "sha256": "b7340c19a04e01378c831ab0109c06c4c9a2f64c6469ffaa4ee871dc337b3788"
+        },
+        "photo_split1_seed44.npz": {
+          "split": 1,
+          "seed": 44,
+          "sizes": [
+            29017,
+            9672,
+            9673
+          ],
+          "sha256": "1392f7a53de6fcf74c0a4e414f102df0a8b088f4eecb6dbd8fc40f9ca3e56de9"
+        },
+        "photo_split1_seed45.npz": {
+          "split": 1,
+          "seed": 45,
+          "sizes": [
+            29017,
+            9672,
+            9673
+          ],
+          "sha256": "bb7fd77dd06eee8f516f622f08ffdfd6ea31008d857f65c232c6a34f15c9da53"
+        }
+      }
+    },
+    "pubmed": {
+      "config_seed": 42,
+      "num_nodes": 19717,
+      "files": {
+        "pubmed_split1_seed42.npz": {
+          "split": 1,
+          "seed": 42,
+          "sizes": [
+            11830,
+            3943,
+            3944
+          ],
+          "sha256": "31d762442261c8c5f41404b225e02174a430c2ab7db0563038173a19e24ad2c8"
+        },
+        "pubmed_split1_seed43.npz": {
+          "split": 1,
+          "seed": 43,
+          "sizes": [
+            11830,
+            3943,
+            3944
+          ],
+          "sha256": "e689ef41d9f397ab6d701398397556780a75fe6cb3901e0ce45ae20cf721a876"
+        },
+        "pubmed_split1_seed44.npz": {
+          "split": 1,
+          "seed": 44,
+          "sizes": [
+            11830,
+            3943,
+            3944
+          ],
+          "sha256": "28ad7a32b794798d10be0d29866d610fc6a1b45f495cf348c21f012c9ef022cd"
+        },
+        "pubmed_split1_seed45.npz": {
+          "split": 1,
+          "seed": 45,
+          "sizes": [
+            11830,
+            3943,
+            3944
+          ],
+          "sha256": "9394c8fb9517e84dc48733f04e3fcf8a44e05ecf030b8a8cba7d9d22cd2f0b28"
+        }
+      }
+    },
+    "reddit": {
+      "config_seed": 42,
+      "num_nodes": 33434,
+      "files": {
+        "reddit_split1_seed42.npz": {
+          "split": 1,
+          "seed": 42,
+          "sizes": [
+            20060,
+            6687,
+            6687
+          ],
+          "sha256": "cd8dfc71907308ecb541b823ccd87b32a05e1b8e011f8a4aa7c82f6fd66cd0db"
+        },
+        "reddit_split1_seed43.npz": {
+          "split": 1,
+          "seed": 43,
+          "sizes": [
+            20060,
+            6687,
+            6687
+          ],
+          "sha256": "46b4a3c4feef14a39f1c815921043764d1ba978d84b813eef2d3af56f102dc6e"
+        },
+        "reddit_split1_seed44.npz": {
+          "split": 1,
+          "seed": 44,
+          "sizes": [
+            20060,
+            6687,
+            6687
+          ],
+          "sha256": "7928f0681b7a4675f2dc2a44a2b51e5e032d0bb6e4ab5cd3c059a8bd3b909c7b"
+        },
+        "reddit_split1_seed45.npz": {
+          "split": 1,
+          "seed": 45,
+          "sizes": [
+            20060,
+            6687,
+            6687
+          ],
+          "sha256": "e3f28876410819cb019ca12bbe36c89c5fb93193148d5bae27dc9a5beee9ae65"
+        }
+      }
+    },
+    "wikics": {
+      "config_seed": 45,
+      "num_nodes": 11701,
+      "files": {
+        "wikics_split1_seed42.npz": {
+          "split": 1,
+          "seed": 42,
+          "sizes": [
+            7020,
+            2340,
+            2341
+          ],
+          "sha256": "add213f00a20fc0f6a33ae83a0d6f5019ec576dd7207b654a6b126161fb5651e"
+        },
+        "wikics_split1_seed43.npz": {
+          "split": 1,
+          "seed": 43,
+          "sizes": [
+            7020,
+            2340,
+            2341
+          ],
+          "sha256": "87277cd40005e17b2820b971664c2eae94430542eba88f7522bde57e26a7884e"
+        },
+        "wikics_split1_seed44.npz": {
+          "split": 1,
+          "seed": 44,
+          "sizes": [
+            7020,
+            2340,
+            2341
+          ],
+          "sha256": "9b383f8bdf266827f021ad86fd455f623924259242c4c14b684ad3c4c8b525c4"
+        },
+        "wikics_split1_seed45.npz": {
+          "split": 1,
+          "seed": 45,
+          "sizes": [
+            7020,
+            2340,
+            2341
+          ],
+          "sha256": "b80799e92bcd6d1891ec464ffa9cd30a3f9273e4d4ec99103d45e7937ceb0571"
+        }
+      }
+    }
+  }
+}

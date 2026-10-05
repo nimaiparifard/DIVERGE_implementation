@@ -1,0 +1,80 @@
+{
+    "seed": 44,
+    "device": 1,
+    "dataset": "cora",
+    "gnn_model_name": "SAGE",
+    "llm_name": "gemma2_2B",
+    "epochs": 200,
+    "early_stop": 20,
+    "re_split": 1,
+    "lr": 0.001,
+    "hidden_dim": 512,
+    "num_layers": 3,
+    "dropout": 0.0,
+    "weight_decay": 0.0,
+    "batch_norm": 1,
+    "tuning": {
+        "init_weight_approach": "eva",
+        "peft_type": "lora",
+        "embedding_cache": "artifacts\\cache\\gemma2_2B_cora_seqcls_lora_init-eva_pool-mean_seed44_semi_supervised.pt",
+        "trial_log": "results\\gnn_tuning\\cora_gemma2_2B_SAGE_supervised_seed44_init-eva\\trials.jsonl",
+        "search_space": {
+            "learning_rate": [
+                0.01,
+                0.005,
+                0.001,
+                0.0001
+            ],
+            "hidden_dim": [
+                128,
+                256,
+                512,
+                1024
+            ],
+            "num_layers": [
+                2,
+                3
+            ],
+            "dropout": [
+                0.0,
+                0.1,
+                0.01,
+                0.5
+            ],
+            "weight_decay": [
+                0.0,
+                0.01
+            ],
+            "batch_norm": [
+                0,
+                1
+            ]
+        },
+        "val_acc": 89.91666666666667,
+        "val_acc_std": 0.17441967269268388,
+        "test_acc": 88.5,
+        "test_acc_std": 0.23252240035460503,
+        "val_f1": 87.82333333333334,
+        "test_f1": 87.33666666666666,
+        "val_acc_per_seed": [
+            90.04,
+            89.67,
+            90.04
+        ],
+        "test_acc_per_seed": [
+            88.56,
+            88.19,
+            88.75
+        ],
+        "eval_seeds": [
+            44,
+            1044,
+            2044
+        ],
+        "n_candidates": 512,
+        "n_promoted": 16,
+        "search": "random",
+        "total_time_sec": 309.2,
+        "timestamp": "2026-09-30 07:02:53"
+    }
+}

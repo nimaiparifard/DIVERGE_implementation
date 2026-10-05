@@ -1,0 +1,14 @@
+TAGS DATA Augmentation with diverge approch for Semi Supervised data:
+1- api to websites to get papers with spicific keywork like to pseddo label in tags pseduo labels
+2- if we can not enough paper or nodes demand llm to generate fake or unreal nodes.
+3- add these nodes to graph 
+3-1 fine tune llm with these generated nodes and trained nodes in semi supervised setting 
+3-2 extract embeddings from fine tuned model 
+3-2 train link predition gnn with all nodes 
+3-3 add augmented nodes to grapg and crated augmented graph.
+4- train gnn on augmented graph.
+5- run diverge eesemble adapative apporch 
+
+
+
+write 5 proposed things i can add to 5 line help more novelty:

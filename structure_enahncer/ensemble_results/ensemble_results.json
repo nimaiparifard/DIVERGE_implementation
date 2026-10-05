@@ -1,0 +1,25 @@
+{
+    "ensemble_results": {
+        "train": {
+            "accuracy": 98.21,
+            "macro_f1": 98.1,
+            "weighted_f1": 98.21
+        },
+        "val": {
+            "accuracy": 89.67,
+            "macro_f1": 87.89,
+            "weighted_f1": 89.54
+        },
+        "test": {
+            "accuracy": 92.62,
+            "macro_f1": 91.2,
+            "weighted_f1": 92.55
+        }
+    },
+    "best_hyperparams": {
+        "num_layers": 2,
+        "hidden_dim": 128,
+        "dropout": 0.5,
+        "learning_rate": 0.01
+    }
+}

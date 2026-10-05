@@ -1,0 +1,80 @@
+{
+    "seed": 44,
+    "device": 1,
+    "dataset": "citeseer",
+    "gnn_model_name": "GIN",
+    "llm_name": "gemma2_2B",
+    "epochs": 200,
+    "early_stop": 20,
+    "re_split": 1,
+    "lr": 0.005,
+    "hidden_dim": 256,
+    "num_layers": 2,
+    "dropout": 0.0,
+    "weight_decay": 0.0,
+    "batch_norm": 1,
+    "tuning": {
+        "init_weight_approach": "eva",
+        "peft_type": "lora",
+        "embedding_cache": "artifacts\\cache\\gemma2_2B_citeseer_seqcls_lora_init-eva_pool-mean_seed44_semi_supervised.pt",
+        "trial_log": "results\\gnn_tuning\\citeseer_gemma2_2B_GIN_supervised_seed44_init-eva\\trials.jsonl",
+        "search_space": {
+            "learning_rate": [
+                0.01,
+                0.005,
+                0.001,
+                0.0001
+            ],
+            "hidden_dim": [
+                128,
+                256,
+                512,
+                1024
+            ],
+            "num_layers": [
+                2,
+                3
+            ],
+            "dropout": [
+                0.0,
+                0.1,
+                0.01,
+                0.5
+            ],
+            "weight_decay": [
+                0.0,
+                0.01
+            ],
+            "batch_norm": [
+                0,
+                1
+            ]
+        },
+        "val_acc": 75.77333333333333,
+        "val_acc_std": 0.7485244744755428,
+        "test_acc": 75.13,
+        "test_acc_std": 0.6579260343432708,
+        "val_f1": 69.99666666666667,
+        "test_f1": 68.64999999999999,
+        "val_acc_per_seed": [
+            74.73,
+            76.14,
+            76.45
+        ],
+        "test_acc_per_seed": [
+            74.45,
+            76.02,
+            74.92
+        ],
+        "eval_seeds": [
+            44,
+            1044,
+            2044
+        ],
+        "n_candidates": 512,
+        "n_promoted": 16,
+        "search": "random",
+        "total_time_sec": 202.9,
+        "timestamp": "2026-09-30 06:46:09"
+    }
+}

@@ -1,0 +1,156 @@
+==============================================================================
+ DIVERGE on RunPod (RTX 4090, 24 GB) - which script to run, and how to keep the GPU full
+==============================================================================
+
+PIPELINE (always in this order - each step needs the output of the one before)
+
+   1. train LoRA adapters     -> artifacts/<llm>_<ds>_seqcls_lora_semi_supervised_init_type_<init>_seed<s>/
+   2. cache LLM embeddings    -> artifacts/cache/<llm>_<ds>_seqcls_lora_init-<init>_pool-mean_seed<s>_semi_supervised.pt
+   3. DIVERGE (GNN + edge editing + ensemble) -> results/diverge/diverge_results.csv
+
+WHICH SCRIPT (Linux = sh_scripts/*.sh, Windows = scripts/*.bat)
+
+   step      one job at a time (sequential)            SEVERAL JOBS AT ONCE (parallel)  <- use these on the 4090
+   -------   ---------------------------------------   ----------------------------------
+   train     sh_scripts/run_all_datasets_lora_init.sh  sh_scripts/run_lora_init_parallel.sh
+   cache     sh_scripts/run_cache_embedding_all_...sh  sh_scripts/run_cache_embedding_parallel.sh
+   DIVERGE   sh_scripts/run_diverge.sh                 (none - GNN step is light, run it sequentially)
+
+   helpers:  bootstrap_cloud.sh  (install + models + datasets)   list_runs.sh (what is done)
+             export_outputs.sh   (pack results to download)      restore_outputs.sh (unpack on another machine)
+
+   Windows only: scripts\run_lora_init_parallel.bat opens a few training windows by hand (fixed list,
+   no VRAM check). The .sh parallel scripts are the real ones: queue + VRAM check + OOM retry + skip done.
+
+   Parallel and sequential scripts write the SAME files / history CSVs and both skip finished combos,
+   so you can stop one and continue with the other at any time.
+
+------------------------------------------------------------------------------
+ 0. BEFORE YOU PAY FOR THE 4090  (saves money)
+------------------------------------------------------------------------------
+ - Commit + push the code (the parallel scripts are new), or pack it:  bash sh_scripts/pack_code.sh
+ - Create a NETWORK VOLUME (~100 GB) in the same datacenter as the 4090s.
+ - Optional, cheapest: start a cheap CPU pod on that volume and do only the downloads there
+   (they need no GPU and land on the volume):
+       step 1 below, then   pip install -q huggingface_hub
+                            bash sh_scripts/download_models.sh ; bash sh_scripts/download_datasets.sh
+   (the last "integrity check" of download_datasets.sh needs torch + torch_geometric; if it errors on
+    the CPU pod the files are still downloaded - it is checked again when setup runs on the GPU pod)
+   stop it, start the 4090 pod on the same volume and run only  bash sh_scripts/setup_env.sh
+   (pip packages live on the container disk, so they must be installed on the GPU pod itself, ~5 min).
+ - Pod template: "RunPod PyTorch" (CUDA 12.x). Container disk 30 GB. Volume mounted at /workspace.
+
+------------------------------------------------------------------------------
+ 1. GET THE CODE  (inside /workspace = the persistent volume)
+------------------------------------------------------------------------------
+   cd /workspace
+   git clone -b master https://github.com/nimaiparifard/DIVERGE.git   # the work is on master
+   cd DIVERGE
+   tmux new -s diverge          # ALWAYS work inside tmux: closing the browser tab does not kill the run
+                                # detach: Ctrl+b then d      re-attach later: tmux attach -t diverge
+  pip install hf_transfer
+------------------------------------------------------------------------------
+ 2. SETUP (env + base models + datasets)
+------------------------------------------------------------------------------
+   export HF_TOKEN=hf_xxxxxxxx            # needed for Llama / Gemma
+   DATASETS="cora citeseer pubmed wikics" bash sh_scripts/bootstrap_cloud.sh
+
+   # already trained some adapters on your PC / Colab? bring them in so they are skipped:
+   RESTORE_FROM=/workspace/diverge_outputs_xxx.tar.gz bash sh_scripts/bootstrap_cloud.sh
+
+   # pod restarted on the same volume -> no reinstall needed:
+   SKIP_SETUP=1 bash sh_scripts/bootstrap_cloud.sh      (or just skip this step if models are there)
+
+   NOTE: pip packages live in the container disk, not the volume -> after a NEW pod you run setup again
+   (SKIP_SETUP=1 only if the same pod was just restarted).
+
+------------------------------------------------------------------------------
+ 3. RUN EVERYTHING, GPU NEVER IDLE  (one line, chained)
+------------------------------------------------------------------------------
+   export DATASETS="wikics reddit" LLM_NAMES="llama_3.2_1B smollm2_1.7B gemma2_2B" SEEDS="42 43 44 45"
+
+   bash sh_scripts/run_lora_init_parallel.sh ; \
+   BATCH_SIZE=16 bash sh_scripts/run_cache_embedding_parallel.sh ; \
+   SPLIT=0 bash sh_scripts/run_diverge.sh ; \
+   bash sh_scripts/export_outputs.sh
+
+   The next step starts the second the previous one ends. When it finishes, download the tar.gz from
+   /workspace/DIVERGE/exports/ and STOP THE POD (the volume keeps everything).
+
+   Or run the steps one by one:
+     bash sh_scripts/run_lora_init_parallel.sh                     # train
+     BATCH_SIZE=16 bash sh_scripts/run_cache_embedding_parallel.sh  # cache
+     SPLIT=0 bash sh_scripts/run_diverge.sh                          # DIVERGE
+
+   SPLIT: keep the same values you use on Windows - train SPLIT=1 (default of the train scripts),
+   cache SPLIT=0 (default of the cache scripts, loads the seed-tagged adapters), DIVERGE: the .sh default
+   is 0, your run_diverge.bat uses 1 -> pass SPLIT explicitly so both machines match.
+
+------------------------------------------------------------------------------
+ 4. HOW THE PARALLEL SCRIPTS USE THE 4090
+------------------------------------------------------------------------------
+ They put every not-yet-done (dataset, llm, init, seed) in a queue and keep up to MAX_JOBS python
+ processes running on the one GPU. A new job starts only if
+     running jobs < MAX_JOBS   AND   free VRAM >= MIN_FREE_GB
+ A job that still dies with "CUDA out of memory" waits for VRAM and is retried (OOM_RETRIES times).
+ CPU threads are split between jobs (OMP_NUM_THREADS = cores / MAX_JOBS).
+
+   knob          train default   cache default   meaning
+   -----------   -------------   -------------   ---------------------------------------------
+   MAX_JOBS      4               4               max processes on the GPU at once
+   MIN_FREE_GB   6               4               free VRAM needed before launching the next one
+   STAGGER_SEC   60              20              wait after a launch (model load) before checking VRAM again
+   OOM_RETRIES   2               2               retries after an OOM crash
+   BATCH_SIZE    -               config value    cache only: caching batch size (config: llama 32, smollm 8, gemma 4 -
+                                                 sized for a 12 GB card; 16 is safe on 24 GB, try 32)
+   KEEP_CHECKPOINTS 0            -               train only: 1 = keep outputs/<run>/checkpoint-* (adapter is saved anyway)
+
+ Why it helps: training uses batch size 1 (grad-accumulation 16) -> one run needs only ~4 GB
+ (measured: llama_3.2_1B peak 3.9 GB) and leaves the 4090 mostly idle. 4 runs together finish close
+ to 3-4x sooner for the same $/hour.
+
+ FINDING THE BEST MAX_JOBS (do this in the first 10 minutes, it is where the money is):
+   watch -n 2 nvidia-smi          (second tmux window: Ctrl+b then c)
+   - GPU-Util < 80 % and > 6 GB VRAM free   -> stop (Ctrl+c) and restart with MAX_JOBS=6 (finished runs are skipped)
+   - GPU-Util ~ 95-100 %                    -> that is the max; more jobs only makes each one slower
+   - OOM retries in the log                 -> lower MAX_JOBS or raise MIN_FREE_GB
+   Estimate from measured VRAM:  python scripts/estimate_parallel_jobs.py --total-vram-gb 24
+   Typical starting points on 24 GB:  train MAX_JOBS=4-5,  cache MAX_JOBS=4 with BATCH_SIZE=16.
+   RAM: every job also loads the model in CPU RAM first - with 4-6 jobs pick a pod with >= 32 GB RAM.
+
+ Examples:
+   MAX_JOBS=5 DATASETS=cora LLM_NAMES=llama_3.2_1B bash sh_scripts/run_lora_init_parallel.sh
+   MAX_JOBS=6 BATCH_SIZE=32 DATASETS="cora citeseer" bash sh_scripts/run_cache_embedding_parallel.sh
+
+ Stopping: Ctrl+c in the tmux window stops the queue; if python jobs keep running:  pkill -f train_llm ; pkill -f cache.cache_embedding
+ A run killed half-way is NOT marked done -> it is simply redone on the next start.
+
+------------------------------------------------------------------------------
+ 5. MONITORING
+------------------------------------------------------------------------------
+   cat results/run_status/PARALLEL_TRAIN_STATUS.txt       # running jobs, free VRAM, GPU util
+   cat results/run_status/PARALLEL_CACHE_STATUS.txt
+   tail -f results/run_status/logs/lora_cora_llama_3.2_1B_pissa_seed42.log   # one job's output
+   ls -t results/run_status/logs | head                    # newest logs
+   cat results/run_status/FAILED_RUNS.txt                  # training failures
+   cat results/run_status/CACHE_FAILED_RUNS.txt            # cache failures
+   bash sh_scripts/list_runs.sh                            # table: trained / cached / DIVERGE-done
+
+------------------------------------------------------------------------------
+ 6. GET RESULTS BACK TO YOUR PC
+------------------------------------------------------------------------------
+   bash sh_scripts/export_outputs.sh                       # -> exports/diverge_outputs_<host>_<time>.tar.gz
+   (filter: DATASETS=cora SEEDS=42 bash sh_scripts/export_outputs.sh)
+   download it from the RunPod file browser / Jupyter, then on Windows in Git Bash:
+   bash sh_scripts/restore_outputs.sh ~/Downloads/diverge_outputs_<host>_<time>.tar.gz
+
+------------------------------------------------------------------------------
+ CAVEATS
+------------------------------------------------------------------------------
+ - wall_clock / gpu_hours / inference speed in results/efficiency/lora_finetune_efficiency.csv are
+   measured while sharing the GPU -> do NOT use parallel runs for the paper's efficiency table.
+   Re-run 1 job per model alone (sequential script) for those numbers. Accuracy is unaffected.
+ - Re-training a seed on the 4090 gives close, not bit-identical, numbers vs your PC (different kernels).
+   If you already have an adapter, restore it instead of retraining.
+ - SYNC_DIR: the parallel scripts sync only once at the end (a mid-run sync could copy another job's
+   half-written file). On RunPod /workspace is already persistent, so SYNC_DIR is not needed.

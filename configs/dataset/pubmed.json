@@ -1,0 +1,9 @@
+{
+    "name": "pubmed",
+    "seed": 42,
+    "llm_responses_name": "gpt_4o",
+    "enhance_features_name": "TA",
+    "max_length": 512,
+    "num_samples": 19717,
+    "num_classes": 3
+}

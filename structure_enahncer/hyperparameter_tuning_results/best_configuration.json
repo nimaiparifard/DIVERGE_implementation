@@ -1,0 +1,9 @@
+{
+    "best_config": {
+        "removal_strategy": "high_uncertainty",
+        "top_k_ratio": 0.25,
+        "train_number": 5,
+        "ensemble_approach": "learnable_per_classes"
+    },
+    "best_score": 0.2940000000000026
+}

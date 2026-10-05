@@ -1,0 +1,80 @@
+{
+    "seed": 42,
+    "device": 1,
+    "dataset": "reddit",
+    "gnn_model_name": "GIN",
+    "llm_name": "llama_3.2_1B",
+    "epochs": 200,
+    "early_stop": 20,
+    "re_split": 1,
+    "lr": 0.01,
+    "hidden_dim": 128,
+    "num_layers": 2,
+    "dropout": 0.01,
+    "weight_decay": 0.01,
+    "batch_norm": 1,
+    "tuning": {
+        "init_weight_approach": "eva",
+        "peft_type": "lora",
+        "embedding_cache": "artifacts\\cache\\llama_3.2_1B_reddit_seqcls_lora_init-eva_pool-mean_seed42_semi_supervised.pt",
+        "trial_log": "results\\gnn_tuning\\reddit_llama_3.2_1B_GIN_supervised_seed42_init-eva\\trials.jsonl",
+        "search_space": {
+            "learning_rate": [
+                0.01,
+                0.005,
+                0.001,
+                0.0001
+            ],
+            "hidden_dim": [
+                128,
+                256,
+                512,
+                1024
+            ],
+            "num_layers": [
+                2,
+                3
+            ],
+            "dropout": [
+                0.0,
+                0.1,
+                0.01,
+                0.5
+            ],
+            "weight_decay": [
+                0.0,
+                0.01
+            ],
+            "batch_norm": [
+                0,
+                1
+            ]
+        },
+        "val_acc": 63.06666666666667,
+        "val_acc_std": 2.0168347037430276,
+        "test_acc": 64.35333333333334,
+        "test_acc_std": 2.5641156153514046,
+        "val_f1": 62.47,
+        "test_f1": 63.853333333333346,
+        "val_acc_per_seed": [
+            64.15,
+            64.81,
+            60.24
+        ],
+        "test_acc_per_seed": [
+            66.29,
+            66.04,
+            60.73
+        ],
+        "eval_seeds": [
+            42,
+            1042,
+            2042
+        ],
+        "n_candidates": 512,
+        "n_promoted": 16,
+        "search": "random",
+        "total_time_sec": 0.0,
+        "timestamp": "2026-10-01 22:24:41"
+    }
+}

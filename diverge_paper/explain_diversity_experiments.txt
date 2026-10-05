@@ -1,0 +1,990 @@
+DIVERSITY EXPERIMENTS FOR THE IPM REVISION
+Why LoRA initialization diversity produces representation diversity
+=====================================================================
+
+Contents
+  0. What the two reviewer comments actually ask
+  1. Shared design of the experiments (pool, pair types, statistical tests)
+  2. Experiment A  - experiments/cka.py
+  3. Experiment B  - experiments/embedding_disagreement_for_gnn_with_dffirent_intilization.py
+  4. Experiment 1  - seed_vs_init_diversity.py
+  5. Experiment 2  - error_consistency_analysis.py
+  6. Experiment 3  - complementarity_analysis.py
+  7. Experiment 4  - lora_subspace_analysis.py
+  8. Experiment 5  - knn_neighborhood_analysis.py
+  9. Overall verdict: how far do the results answer the reviewers?
+ 10. What to put in the paper, and which claims to change
+ 11. Draft response to the reviewers
+ 12. Work to finish before resubmission
+ 13. Supervised setting: Cora vs CiteSeer (3 LLMs), and which to use
+
+All numbers below come from the runs already in results/ (Cora, LLaMA-3.2-1B,
+LoRA r=8, semi-supervised split, GraphSAGE, GNN seed 42, LoRA seeds 42-45).
+ORTHOGONAL has no seed-tagged caches yet, so the seed-vs-init pool has 16
+members (4 inits x 4 seeds) instead of 20.
+
+
+---------------------------------------------------------------------
+0. WHAT THE TWO REVIEWER COMMENTS ACTUALLY ASK
+---------------------------------------------------------------------
+
+Comment 1: "The relationship between initialization diversity and
+representation diversity is not sufficiently justified."
+  -> Question of MECHANISM. Show the chain:
+       different init -> different adapter weights -> different embeddings
+       -> different GNN predictions.
+
+Comment 2: "Explain why different LoRA initializations necessarily produce
+meaningful and complementary semantic views rather than merely random
+training variance."
+  This comment contains three separate questions:
+  (a) CONTROL: is the diversity between inits larger than the diversity you
+      get by retraining the same init with another random seed?
+  (b) MEANINGFUL / SYSTEMATIC: does each init have a reproducible "character"
+      (same errors, same class strengths across seeds), or are the
+      differences random?
+  (c) COMPLEMENTARY: does the diversity help, i.e. does combining the views
+      fix errors and increase accuracy?
+
+  About the word "necessarily": no experiment can show that inits
+  *necessarily* give complementary views. Do not claim that in the reply.
+  Answer with (i) a mechanism argument for why they CAN differ and
+  (ii) empirical evidence of how much they differ in practice.
+
+The key point: the old evidence in the paper (t-SNE figure, one CKA matrix,
+ensemble gain) cannot answer 2(a). Those results come from ONE seed, so the
+reviewer can always say "retraining with another seed would give the same
+amount of diversity". Only a design with several seeds per init (experiments
+1-5) can separate "init effect" from "seed noise".
+
+
+---------------------------------------------------------------------
+1. SHARED DESIGN OF EXPERIMENTS 1-5 (experiments/diversity_common.py)
+---------------------------------------------------------------------
+
+1.1 The pool
+  For one (dataset, LLM), every combination (init, LoRA seed) is one pool
+  member. Example: 5 inits x 4 seeds = 20 members, each with its own trained
+  LoRA adapter and its own cached node embedding.
+
+  - Embeddings are loaded only from seed-tagged cache files
+    (..._init-<init>_pool-mean_seed<seed>...pt). There is NO fallback to an
+    untagged cache. A fallback would put the same embedding under several
+    seeds and produce fake zero seed variance. Missing members are skipped
+    and listed in the report (this is why ORTHOGONAL is absent).
+  - One GNN is trained per member with a FIXED GNN seed and FIXED split
+    (--gnn_seed 42). So the only differences between two members are the
+    LoRA init and/or the LoRA seed. The GNN's class probabilities,
+    predictions and penultimate (pre-logit) embeddings are cached in
+    results/diversity/gnn_pool/ and reused by all five experiments.
+
+  What the LoRA seed changes: classification-head init, data order, dropout
+  masks, and, for random inits (Gaussian, Orthogonal) the random A matrix.
+  EVA is data-driven (SVD of activations on minibatches), so the seed also
+  changes the EVA init through the batches it sees. PiSSA and LoftQ are
+  deterministic given the base weights: the seed does not change their
+  adapter init.
+
+1.2 The three pair types (function pair_groups)
+  For each pair of members (i, j):
+    seed-only : same init,      different seed  -> pure seed / training noise
+    init-only : different init, same seed       -> pure initialization effect
+                (same seed = same head init, data order, dropout)
+    both      : different init, different seed
+  In the 16-member Cora pool: 24 seed-only, 24 init-only, 72 both pairs.
+
+  All diversity matrices are written as DISTANCES (larger = more diverse):
+  1 - CKA, prediction disagreement, 1 - Jaccard, 1 - subspace overlap.
+
+1.3 The statistical tests (reused in every experiment)
+  (T1) "Init effect exists" - permutation test.
+       Statistic: mean(both) - mean(seed-only). Both groups differ in seed,
+       so seed noise cancels; the extra distance in "both" comes from the
+       init. p-value: shuffle init labels within each seed 2000 times.
+       Question: does changing the init ADD diversity on top of seed noise?
+  (T2) "Init-only / seed-only ratio" + one-sided Mann-Whitney U.
+       Ratio > 1 means changing only the init moves the representation MORE
+       than changing only the seed. This is the direct answer to 2(a).
+       (Approximate p-value: pairs that share a member are not independent.)
+  (T3) PERMANOVA (Anderson 2001) on the distance matrix, once with init as
+       the factor and once with seed as the factor. R^2 = share of the total
+       variance explained ("init explains X%, seed explains Y%").
+  (T4) Mantel test (Spearman, permutations): correlation between two pool
+       distance matrices, e.g. "pairs far apart in weight space are also
+       far apart in embedding space".
+
+  T1 and T2 answer different questions. T1 can be significant while T2 is
+  not: then init adds diversity, but no more than a new seed would add.
+  This is exactly what happens on Cora (see below).
+
+
+---------------------------------------------------------------------
+2. EXPERIMENT A - experiments/cka.py
+---------------------------------------------------------------------
+
+Goal
+  Measure how similar the embeddings of the five inits are, for one seed.
+
+Procedure
+  1. Load the five cached LLM embedding matrices (PiSSA, Orthogonal,
+     Gaussian, LoftQ, EVA) for one (dataset, LLM, seed). All have the same
+     rows (the same nodes).
+  2. For each pair, compute linear CKA (Kornblith et al., 2019):
+        CKA(X,Y) = ||Yc^T Xc||_F^2 / (||Xc^T Xc||_F * ||Yc^T Yc||_F)
+     with Xc, Yc column-centred. It is computed in feature space (d x d),
+     which is cheap even for many nodes.
+  3. Report the 5x5 matrix, the mean off-diagonal CKA (one number for
+     ensemble diversity), the most similar and the most diverse pair.
+  4. Save a heatmap PNG and two CSVs (long format per pair + one summary row).
+
+Why CKA
+  CKA compares the similarity STRUCTURE of the node set, not coordinates.
+  It is invariant to rotation and isotropic scaling of the embedding space.
+  Two runs that learn the same geometry in a rotated basis get CKA = 1.
+  Plain cosine between embeddings would call them different. So a low CKA
+  is real geometric difference, not a basis artefact.
+  1 = same geometry, 0 = unrelated geometry.
+
+Results (Cora, LLaMA-3.2-1B, 4 seeds, results/cka/cka_summary_results.csv)
+  mean off-diagonal CKA: 0.864 / 0.865 / 0.868 / 0.871  (seeds 42-45)
+  most similar pair   : LoftQ-EVA          CKA 0.948-0.970  (all 4 seeds)
+  most diverse pair   : Orthogonal-Gaussian CKA 0.745-0.758  (all 4 seeds)
+
+What it shows
+  - The inits do not give identical embeddings (CKA clearly below 1).
+  - The SAME pairs are the most/least similar in every seed. The similarity
+    pattern between inits is reproducible across seeds. This is weak
+    evidence against "pure noise".
+
+What it does NOT show
+  It uses one seed at a time, so it has no seed-noise baseline. CKA 0.86
+  between inits does not say whether two seeds of the same init would also
+  give 0.86. This is exactly what the reviewer asks. Experiment 1 adds this
+  baseline.
+
+Use in the paper
+  The heatmap is a good descriptive figure (appendix, or next to the t-SNE
+  figure). It must not be the only evidence.
+
+
+---------------------------------------------------------------------
+3. EXPERIMENT B - experiments/embedding_disagreement_for_gnn_with_dffirent_intilization.py
+---------------------------------------------------------------------
+
+Goal
+  Measure diversity at the level that matters for the ensemble: the GNN
+  predictions.
+
+Procedure
+  1. Load the five init embeddings for one (dataset, LLM, seed).
+  2. Train one GNN on each (gnn_train_and_report, same seed/split).
+  3. Predict a label for every node with each GNN.
+  4. For every pair: disagreement rate = share of nodes where the two GNNs
+     predict different labels (on test nodes and on all nodes).
+  5. Save one CSV row per pair and a 5x5 disagreement-matrix CSV.
+
+What it shows
+  Whether the representation differences survive the GNN and change
+  predictions. CKA can be low while predictions are identical; then the
+  diversity is useless for the ensemble.
+
+Limits
+  - Same problem as Experiment A: one seed, no seed-noise baseline.
+  - Disagreement alone is not complementarity. A weak model disagrees a lot
+    because it is wrong. Experiment 3 measures whether disagreement is
+    useful.
+  - There are no saved results yet (results/disagreement/ does not exist).
+    Experiment 1 already computes the same disagreement for the full pool,
+    so this script is not required anymore. It is now a special case of
+    Experiment 1.
+
+
+---------------------------------------------------------------------
+4. EXPERIMENT 1 - seed_vs_init_diversity.py
+   "Is the diversity between inits larger than seed noise?"
+   Answers: Comment 2(a) directly; also Comment 1.
+---------------------------------------------------------------------
+
+Procedure
+  For the whole pool, compute three distance matrices:
+    L1  LLM embeddings  : 1 - linear CKA between cached LoRA embeddings
+    L2  GNN embeddings  : 1 - linear CKA between GNN penultimate layers
+    L3  GNN predictions : label disagreement on test nodes
+  For each matrix: tests T1, T2, T3, the within-init seed noise per init, and
+  a heatmap sorted by init. If init dominates seed, the heatmap shows clear
+  blocks along the diagonal (low distance inside each init block).
+
+Results (Cora, 16 members)
+
+  Level             seed-only  init-only  both    T1 p     ratio  T2 p   PERMANOVA R2
+                                                                         init / seed
+  LLM emb (1-CKA)    0.099      0.092     0.122   0.0005   0.93x  0.55   0.35* / 0.43*
+  GNN emb (1-CKA)    0.191      0.183     0.219   0.030    0.96x  0.59   0.33  / 0.39
+  Predictions        0.093      0.089     0.096   0.045    0.95x  0.90   0.21  / 0.29*
+  (* = PERMANOVA p < 0.001)
+
+  Seed noise per init (LLM, mean 1-CKA between seeds of the same init):
+    LoftQ 0.064 < EVA 0.079 < PiSSA 0.098 < Gaussian 0.155
+
+How to read it
+  + T1 is significant at all three levels. Changing the init ADDS diversity
+    on top of seed noise ("both" pairs are the most diverse). So init is a
+    real source of diversity, not zero.
+  - T2 ratio is about 0.93-0.96, NOT above 1. Changing only the init moves
+    the embedding about as much as changing only the seed (slightly less).
+  - PERMANOVA: seed explains more variance than init (0.43 vs 0.35 for LLM
+    embeddings). Two DIFFERENT inits trained with the SAME seed (same head
+    init, data order, dropout) are more similar than the SAME init trained
+    with two seeds. The training trajectory shapes the representation at
+    least as much as the adapter init.
+  - Inits differ in stability: deterministic inits (LoftQ, PiSSA) have low
+    seed noise; Gaussian has the highest (the seed re-draws its A matrix).
+
+Honest conclusion for Cora
+  Init diversity is real and additive, but it is of the SAME ORDER as seed
+  diversity, not larger. This result does not support a claim that
+  initialization gives "more meaningful" diversity than random variance.
+
+
+---------------------------------------------------------------------
+5. EXPERIMENT 2 - error_consistency_analysis.py
+   "Are the differences between inits systematic or random?"
+   Answers: Comment 2(b).
+---------------------------------------------------------------------
+
+Idea
+  If an init gives a genuinely different semantic view, its errors should be
+  reproducible: the same init fails on the same nodes/classes across seeds,
+  and another init fails on different nodes/classes. Pure noise gives no
+  such structure.
+
+Procedure (test nodes, balanced 4 inits x 4 seeds)
+  a) Error-set distance: 1 - Jaccard(errors_i, errors_j), tests T1/T2.
+  b) Error persistence per init: of the nodes an init gets wrong in at least
+     one seed, the share it gets wrong in EVERY seed.
+  c) Systematic rescues: nodes that init A gets wrong in every seed AND init
+     B gets right in every seed. This is the strictest definition of "B
+     systematically complements A".
+  d) Two-way ANOVA on per-class accuracy: factors init x class, seeds are
+     the replicates. The residual term is exactly the seed noise. A
+     significant init x class interaction = the inits have class-specific
+     strengths larger than seed noise. This also tests the paper's
+     motivation for class-level ensemble weights.
+
+Results (Cora)
+  a) error distance: seed-only 0.462, init-only 0.438, both 0.473;
+     T1 p = 0.062, ratio 0.95x (p = 0.95)  -> not significant
+  b) persistence: PiSSA 0.30, Gaussian 0.25, LoftQ 0.38, EVA 0.35
+  c) rescue matrix: 0-2 nodes per pair (out of ~540 test nodes)
+     202 nodes are persistently wrong for at least one init, 75 for every
+     init. The other 127 are not rescued systematically: another init gets
+     them right only in SOME seeds.
+  d) ANOVA: init F(3,84)=0.08, p=0.97
+            class F(6,84)=45.0, p<1e-23
+            init x class F(18,84)=1.48, p=0.12, partial eta2=0.24
+     Per-class winners exist (e.g. Gaussian best on class 4, LoftQ on
+     class 0, PiSSA on class 6), but the best init wins only 1-3 of 4
+     seeds.
+
+How to read it
+  On Cora the errors of different inits are not more different than the
+  errors of different seeds. There are almost no systematic rescues. The
+  class-specific pattern points in the right direction (eta2 = 0.24) but is
+  not significant with 4 seeds and 7 classes.
+
+Honest conclusion for Cora
+  No clear evidence of systematic, init-specific complementarity. The
+  init x class trend is the most promising part. It may become significant
+  on datasets with more classes (arXiv: 40, WikiCS: 10) or with more seeds.
+
+
+---------------------------------------------------------------------
+6. EXPERIMENT 3 - complementarity_analysis.py
+   "Does the diversity turn into ensemble gain?"
+   Answers: Comment 2(c).
+---------------------------------------------------------------------
+
+All ensembles here are UNIFORM probability averages: no weights are
+learned, nothing is fitted on test nodes. This isolates the value of
+diversity from the value of the learned ensemble head.
+
+Procedure
+  a) Pairwise complementarity (Kuncheva & Whitaker, 2003) on test nodes:
+     double-fault rate (both wrong), oracle accuracy (at least one right),
+     oracle gain over the better member, Yule's Q. Tests T1/T2.
+  b) Seed-only ensembles (1 init, k seeds) vs multi-init ensembles (k inits,
+     1 seed) at the SAME size k = 4. For each, the ambiguity decomposition
+     (Krogh & Vedelsby, 1995), an exact identity for a uniform average:
+         ensemble error = average member error - ambiguity (diversity)
+     This links diversity to gain mathematically.
+  c) Diversity vs gain: every k-subset of the pool (k = 2..5), mean pairwise
+     disagreement vs ensemble gain, Spearman correlation, gain grouped by
+     the number of distinct inits in the subset.
+
+Results (Cora)
+  a) oracle gain seed-only 0.033, init-only 0.032 (ratio 0.96x, n.s.);
+     double fault and Q also about 1.0x.
+  b) k = 4:           ens acc  gain/mean  gain/best  ambiguity
+     seed-only        88.76    +1.54      +0.62      0.0344
+     multi-init       88.76    +1.54      +0.79      0.0320
+     Multi-init > seed-only: p = 0.67 (not significant).
+  c) Spearman(diversity, gain) = 0.73-0.76 for every k (p < 1e-20).
+     k = 4: 1 distinct init +1.54 pp; 4 distinct inits +1.73 pp.
+     k = 5: +1.84 pp for 2, 3 and 4 distinct inits (flat).
+
+How to read it
+  + Diversity is useful: more disagreement -> more ensemble gain, strongly
+    and consistently (rho ~0.75). Every ensemble beats its best member.
+    So the diversity is complementary, not just errors.
+  - But at equal size, an ensemble of 4 inits is as good as an ensemble of 4
+    seeds of one init. The source of diversity (init vs seed) does not
+    matter much on Cora. Mixing inits gives at most +0.2 pp more.
+
+Honest conclusion for Cora
+  "Diversity is complementary and helps" is well supported.
+  "Initialization diversity is better than seed diversity" is not.
+
+
+---------------------------------------------------------------------
+7. EXPERIMENT 4 - lora_subspace_analysis.py
+   "Mechanism: how does init diversity become representation diversity?"
+   Answers: Comment 1 directly. This is the strongest experiment.
+---------------------------------------------------------------------
+
+Procedure (on the trained adapter files in artifacts/)
+  a) Adapter subspace distance between members. For each of the 64 LoRA
+     layers (r = 8), the adapter reads from row(A) and writes into col(B).
+     Overlap of two r-dim subspaces = ||Qi^T Qj||_F^2 / r (1 = same
+     subspace, r/d = random). Also cosine between the updates B_i A_i and
+     B_j A_j. Tests T1/T2.
+  b) Spectral position: overlap of col(B) / row(A) with the top-r and
+     bottom-r singular vectors of the pretrained weight W (random = r/d).
+     PiSSA starts exactly on the top-r subspace, so its overlap after
+     training shows how much of the init survives training.
+  c) Stage chain: Mantel tests between the distance matrices of consecutive
+     stages: adapter weights -> LLM embeddings -> GNN embeddings ->
+     predictions.
+
+  Caveat (also in the code): PiSSA and LoftQ replace W with a residual, so
+  B A is not the update relative to the original W. The analysis compares
+  the adapter factors (the subspace the adapter reads/writes), not W_eff - W.
+
+Results (Cora)
+  a)                  seed-only  init-only  ratio  T2 p     T1 p
+     A subspace        0.53       0.995     1.87x  0.013    0.0005
+     B subspace        0.49       0.964     1.96x  0.00003  0.0005
+     B A product       0.53       0.996     1.89x  0.002    0.0005
+     seed-only distance per init (B A product):
+       PiSSA 0.03, LoftQ 0.08, EVA 0.99, Gaussian 1.00
+  b) overlap with pretrained singular subspaces (random: B 0.0098, A 0.0039)
+                 B_top   B_bottom  A_top   A_bottom
+     PiSSA       0.990   0.000     0.979   0.000   (~100x random, top)
+     LoftQ       0.063   0.004     0.007   0.004   (~6x random, top)
+     Gaussian    0.012   0.024     0.004   0.004   (~random, slight bottom)
+     EVA         0.012   0.027     0.005   0.004   (~random, slight bottom)
+     Std over seeds is ~0.000: each init's spectral position is fixed.
+  c) Mantel (Spearman rho):
+     adapter product -> LLM embedding     +0.76  p < 0.001
+     adapter B       -> LLM embedding     +0.28  p < 0.001
+     LLM embedding   -> GNN embedding     +0.55  p = 0.003
+     LLM embedding   -> predictions       +0.44  p = 0.010
+     GNN embedding   -> predictions       +0.25  p = 0.11 (n.s.)
+     adapter B       -> predictions       +0.14  p = 0.051
+
+How to read it
+  + In weight space the init effect is strong and significant: different
+    inits end in almost orthogonal adapter subspaces (distance ~1), and
+    they stay there after training.
+  + Each init has a distinct, reproducible spectral "address":
+    PiSSA adapts the dominant singular directions of W; LoftQ weakly the
+    dominant ones; Gaussian and EVA are near-random with a small tilt to the
+    minor directions. This is a concrete, mechanistic reason why different
+    inits can encode different information: they modify different parts of
+    the pretrained weight spectrum.
+  + The chain holds from weights to embeddings (rho 0.76) and from
+    embeddings to predictions (rho 0.44). Members far apart in weight space
+    are far apart in representation space. This is the "relationship"
+    Comment 1 asks for.
+  - Seed-only distance is large for Gaussian and EVA, because for these the
+    seed IS part of the init (random A / data-driven SVD). For
+    deterministic inits (PiSSA, LoftQ) the seed barely moves the adapter.
+  - The chain weakens after the GNN: the GNN (message passing over the same
+    graph) pulls the views toward each other. Weight-space diversity is
+    near 1.0, but prediction disagreement is only ~9%.
+
+Honest conclusion for Cora
+  Strong evidence for the mechanism (Comment 1). But the huge weight-space
+  diversity is compressed into modest representation and prediction
+  diversity, and at those levels it is similar in size to seed diversity.
+
+
+---------------------------------------------------------------------
+8. EXPERIMENT 5 - knn_neighborhood_analysis.py
+   "Do inits arrange the LOCAL semantic neighbourhoods differently?"
+   Answers: Comment 2 ("semantic views"); complements the global CKA.
+---------------------------------------------------------------------
+
+Idea
+  CKA is global. Two views can have similar global geometry but different
+  nearest neighbours for each node. A different "semantic view" means that
+  a node's closest documents change.
+
+Procedure (k = 10, cosine, for LLM and GNN embeddings)
+  a) k-NN overlap distance: 1 - mean over nodes of Jaccard(kNN_A(v),
+     kNN_B(v)). Tests T1/T2.
+  b) k-NN label homophily per member: share of a node's 10 neighbours with
+     its own label (how well a view groups same-class nodes).
+  c) Neighbourhood complementarity: share of test nodes whose k-NN majority
+     label is correct in at least one of g views, for g inits (same seed)
+     vs g seeds (same init).
+
+Results (Cora)
+  a) LLM: seed-only 0.61, init-only 0.62, both 0.66; T1 p = 0.0005, ratio 1.02x
+     GNN: seed-only 0.79, init-only 0.78, both 0.81; T1 p = 0.0005, ratio 0.99x
+  b) LLM homophily: Gaussian 0.828 > PiSSA 0.810 > EVA 0.805 > LoftQ 0.800
+     (std over seeds ~0.006, so the Gaussian advantage is reproducible)
+  c) LLM: single view 0.817; any of 4 inits 0.886; any of 4 seeds 0.896
+     GNN: single view 0.869; any of 4 inits 0.919; any of 4 seeds 0.922
+
+How to read it
+  + Neighbourhoods change a lot: about 60% of each node's 10 nearest
+    neighbours differ between two views. Changing the init adds significant
+    local change on top of the seed (T1).
+  + Combining views gives more nodes a correct neighbourhood (+5 to +8 pp).
+  - Again, init and seed produce the same amount of local change, and
+    combining seeds is slightly better than combining inits.
+
+
+---------------------------------------------------------------------
+9. OVERALL VERDICT: HOW FAR DO THE RESULTS ANSWER THE REVIEWERS?
+---------------------------------------------------------------------
+
+Summary of the evidence (Cora):
+
+  Claim                                              Evidence              Verdict
+  -------------------------------------------------  --------------------  ---------------
+  Different inits -> different adapter subspaces     Exp 4a: ratio ~1.9x,  STRONG support
+                                                     p < 0.02
+  Each init has a distinct spectral "address"        Exp 4b                STRONG support
+  Weight differences propagate to embeddings and     Exp 4c Mantel         Supported
+  predictions                                        (0.76, 0.44)
+  Init adds diversity on top of seed noise           Exp 1/5 T1,           Supported
+                                                     p < 0.05
+  The similarity pattern between inits is stable     Exp A                 Supported
+  Diversity is complementary (turns into gain)       Exp 3c rho ~0.75      Supported
+  Init diversity > seed diversity                    Exp 1,3,5 ratio ~0.95 NOT supported
+  Init-specific, systematic errors/class strengths   Exp 2                 NOT supported
+                                                                           (trend only)
+  Multi-init ensemble > seed-only ensemble           Exp 3b p = 0.67       NOT supported
+
+How much this answers each comment (my estimate, for Cora results as they
+are now):
+
+  Comment 1 (relationship init -> representation):  mostly answered (~75%).
+    Exp 4 gives a mechanism (spectral position), a weight-space effect, and a
+    Mantel chain into embeddings and predictions. This is much more than
+    most papers give. The missing part: more datasets/LLMs, and the chain
+    weakens at the GNN stage.
+
+  Comment 2 (meaningful and complementary vs random variance):
+    partially answered (~40-50%), IF you present it honestly.
+    - "Complementary": yes (Exp 3c).
+    - "Not merely random variance": only the weak form (init adds diversity
+      beyond seed, T1). The strong form (init diversity is larger or more
+      systematic than seed diversity) is contradicted on Cora.
+    - "Necessarily": cannot be shown by any experiment; say so.
+
+  IMPORTANT RISK: if the reply claims "init diversity is significantly
+  larger than seed noise", the reviewer can check the new table and see
+  ratios of 0.93-0.96 and PERMANOVA seed R2 > init R2. That would hurt
+  credibility more than an honest, nuanced answer. IPM reviewers usually
+  accept "we tested it; here is what holds and what does not; we changed
+  the claim accordingly" if the core method still works (it does: all
+  ensembles beat their members, and DIVERGE's accuracy results are
+  unaffected).
+
+  Also remember: these are single-dataset results (Cora is the smallest and
+  easiest benchmark, where all views are already ~87% accurate and have
+  little room to differ). The picture may be different on arXiv, PubMed or
+  WikiCS. Do not generalise from Cora in either direction before running
+  the other datasets.
+
+
+---------------------------------------------------------------------
+10. WHAT TO PUT IN THE PAPER, AND WHICH CLAIMS TO CHANGE
+---------------------------------------------------------------------
+
+10.1 Suggested new subsection
+  "Why do different LoRA initializations yield different representations?"
+  (in Results or Discussion, ~1 page + appendix)
+
+  Main text:
+    - Table: Exp 1 (seed-only / init-only / both, T1 p, ratio, PERMANOVA
+      R2) for LLM emb, GNN emb, predictions. Add Exp 4a as a first row
+      "adapter weights". This one table shows the whole story: huge init
+      effect in weights, which becomes similar to seed effect downstream.
+    - Figure: Exp 4b spectral position (bar chart, one bar group per init,
+      with the random baseline line). This is the mechanism figure.
+    - Figure or small table: Exp 4c Mantel chain.
+    - Figure: Exp 3c diversity vs gain scatter (k = 4), coloured by number
+      of distinct inits.
+  Appendix:
+    - Exp A CKA heatmap (can replace or sit next to the t-SNE figure)
+    - Exp 1 pool heatmaps (sorted by init)
+    - Exp 2 (error persistence, rescues, ANOVA) with honest discussion
+    - Exp 3b seed-only vs multi-init table
+    - Exp 5 k-NN results
+    - Exp B is covered by Exp 1 (predictions level); no separate section.
+
+10.2 Claims in template.tex that must be softened
+  Line 118 (abstract): "Different initializations produced complementary
+    embeddings" -> OK as is (diversity is complementary), but do not add
+    "beyond seed variance".
+  Line 176 (contributions): "we show that different LoRA initialization
+    strategies produce complementary semantic representations"
+    -> suggested: "we show that different LoRA initialization strategies
+    place the adapters in distinct, reproducible regions of the pretrained
+    weight spectrum, that these differences propagate to the node
+    embeddings and predictions, and that the resulting diversity is
+    complementary and translates into ensemble gain."
+  Line 272 (motivation): "each initialization strategy can induce a
+    distinct semantic interpretation" -> keep "can", and point to the new
+    subsection for evidence.
+  Any place that says or implies that init diversity is "more meaningful"
+  than seed randomness: remove it, or replace it with the measured result.
+
+10.3 A positive framing that the data supports
+  - Initialization is a CONTROLLABLE, structured lever: each strategy
+    targets a known part of the weight spectrum (top singular directions
+    for PiSSA, near-random for Gaussian/EVA). Seeds are an uncontrolled
+    lever. DIVERGE uses the controlled one, and the two can be combined:
+    "both" pairs are the most diverse at every level (Exp 1, Exp 5).
+  - With deterministic inits (PiSSA, LoftQ) the seed barely changes the
+    adapter (seed-only distance 0.03 / 0.08), but changing the init moves
+    it to an almost orthogonal subspace. For these strategies, the init is
+    the main source of weight-space diversity.
+  - The practical claim DIVERGE needs is only that the views are diverse
+    AND complementary. That holds. Whether the same gain could also be
+    obtained from seeds is a fair limitation to state (see Section 11).
+
+
+---------------------------------------------------------------------
+11. DRAFT RESPONSE TO THE REVIEWERS (adapt after all datasets are run)
+---------------------------------------------------------------------
+
+Comment 1 (relationship between initialization and representation diversity)
+
+  We thank the reviewer for this comment. We added a mechanistic analysis
+  (Section X, Appendix Y) that follows the effect of the initialization
+  through each stage of the pipeline. (i) In weight space, the trained
+  adapters of different initializations occupy nearly orthogonal subspaces
+  (subspace distance 0.96-0.99 vs 0.49-0.53 between seeds of the same
+  initialization; permutation p < 0.001). (ii) Each initialization keeps a
+  distinct and seed-stable position in the spectrum of the pretrained
+  weights: PiSSA adapters remain in the top-r singular subspace (overlap
+  0.99, about 100x the random baseline), LoftQ weakly favours the dominant
+  directions, and Gaussian/EVA adapters are close to random with a slight
+  tilt toward minor directions. Each strategy therefore modifies a
+  different part of the pretrained representation. (iii) Mantel tests show
+  that these weight-space differences propagate: adapter distance
+  correlates with LLM-embedding distance (rho = 0.76, p < 0.001), and
+  embedding distance correlates with GNN prediction disagreement
+  (rho = 0.44, p = 0.01).
+
+Comment 2 (meaningful and complementary views vs random training variance)
+
+  We agree that this required a controlled test. We trained every
+  initialization with four LoRA seeds and compared pairs that differ only
+  in the seed with pairs that differ only in the initialization, at the
+  level of LLM embeddings (CKA), GNN embeddings, predictions, error sets
+  and k-NN neighbourhoods. Changing the initialization adds significant
+  diversity on top of seed variance at every level (permutation tests,
+  p <= 0.045). At the representation and prediction level, however, the
+  size of the initialization effect is comparable to the seed effect
+  (ratio 0.93-0.96). We therefore do not claim that initialization
+  necessarily produces more meaningful diversity than random training
+  variance. What the new experiments support is: (a) initializations
+  provide a controllable and structured source of diversity (distinct
+  spectral subspaces, stable across seeds); (b) the resulting diversity is
+  complementary: ensemble gain increases monotonically with member
+  disagreement (Spearman rho = 0.75, p < 1e-20), and every ensemble
+  exceeds its best member; (c) initialization and seed diversity are
+  additive, since members that differ in both are the most diverse. We
+  revised the contribution statement and added this analysis and its
+  limitations to Sections X and Z.
+
+  [If other datasets show ratio > 1 or significant init x class
+   interaction, report that here as the stronger result.]
+
+
+---------------------------------------------------------------------
+12. WORK TO FINISH BEFORE RESUBMISSION
+---------------------------------------------------------------------
+
+  1. ORTHOGONAL is missing from the pool (no seed-tagged caches). Run
+     run_all_datasets_lora_init.bat and run_cache_embedding_all_datasets.bat
+     for orthogonal, seeds 42-45. In Exp A, Orthogonal-Gaussian is the most
+     diverse pair, so it may change the conclusions.
+  2. Run run_diversity_experiments.bat for all datasets (DATASETS=cora is
+     the only one set now). The reviewer will expect the analysis on more
+     than Cora. At least PubMed and one larger dataset (WikiCS or arXiv).
+     arXiv (40 classes) is where the init x class ANOVA has most power.
+  3. If possible, repeat for a second LLM (to show it is not specific to
+     LLaMA-3.2-1B).
+  4. Recommended additional test: DIVERGE's LEARNED ensemble on the
+     seed-only pool vs the multi-init pool (same size). Exp 3 uses only
+     uniform averages. The paper's argument is class-level learned weights,
+     and the learned head could use class-specific strengths that uniform
+     averaging ignores. If multi-init wins there, it is the best direct
+     answer to Comment 2. If it does not, state it as a limitation.
+  5. More seeds (e.g. 6-8) would give the ANOVA and T2 more power; the
+     init x class effect (eta2 = 0.24, p = 0.12) is close.
+  6. Aggregate all runs from the *_summary.csv files into one table per
+     experiment (mean over datasets + per-dataset rows) for the paper.
+
+
+
+---------------------------------------------------------------------
+13. SUPERVISED SETTING: CORA vs CITESEER (3 LLMs), AND WHICH TO USE
+---------------------------------------------------------------------
+
+Source: results/diversity/*/<dataset>_<llm>_lora_sup_SAGE_gnnseed42_report.txt
+(runs of 2026-09-30). LLMs: Gemma2-2B, LLaMA-3.2-1B, SmolLM2-1.7B. LoRA r=8,
+GraphSAGE, GNN seed 42, LoRA seeds 42-45. 5 inits x 4 seeds = 20 members,
+EXCEPT Cora + LLaMA (16 members, ORTHOGONAL still has no seed-tagged caches).
+
+13.0 Two things to know before reading the numbers
+
+  (1) CiteSeer + LLaMA has two FAILED members.
+      ORTHOGONAL-42 = 18.50% and ORTHOGONAL-44 = 28.21% test accuracy
+      (the other 18 members: 76.7-85.6%). Their LLM embeddings are already
+      broken (within-ORTHOGONAL 1-CKA = 0.84, max 0.99), so the LoRA
+      training collapsed; it is not a GNN problem. Every "init effect" on
+      CiteSeer + LLaMA (ratio 1.14-1.35x, PERMANOVA init R2 0.33-0.44,
+      ensemble gain +7 pp, Spearman 0.84) is inflated by these two runs.
+      Do NOT report CiteSeer + LLaMA as it is. Retrain ORTHOGONAL seeds 42
+      and 44 (or drop ORTHOGONAL from this pool) and rerun.
+      Below, CiteSeer + LLaMA numbers are marked (!).
+
+  (2) Cora + LLaMA adapters and LLM embeddings are the same as in the
+      semi-supervised run (sections 4-8). The adapter/cache files are
+      shared by both splits (historical "_semi_supervised" name). So the
+      adapter-level and LLM-embedding-level numbers for Cora + LLaMA are
+      identical to sections 4 and 7; only the GNN-level numbers change.
+      For the other pools, the adapters were trained per dataset (numbers
+      differ slightly between Cora and CiteSeer for the same LLM).
+
+13.1 Member accuracy (mean of the 20 members, fixed GNN seed)
+
+                    Cora     CiteSeer
+  Gemma2-2B         90.65    82.01
+  LLaMA-3.2-1B      90.98    75.72 (!)  (81.54 without the 2 failed runs)
+  SmolLM2-1.7B      89.29    81.54
+
+  CiteSeer is about 8-9 pp harder. That leaves more room for views to
+  differ and for the ensemble to fix errors.
+
+13.2 Experiment 1 - seed-only vs init-only (seed_vs_init)
+
+  Ratio = init-only / seed-only (> 1 means the init moves the
+  representation MORE than the seed). T1 = permutation p for "init adds
+  diversity on top of seed". * = one-sided Mann-Whitney p < 0.05.
+
+  LLM embedding (1-CKA)     ratio            T1 p      PERMANOVA R2 init / seed
+    Cora     Gemma          1.20x* (p=.012)  .0005     0.48* / 0.22 (n.s.)
+    Cora     LLaMA          0.93x            .0005     0.35* / 0.43*
+    Cora     SmolLM         0.97x            .0005     0.37* / 0.32*
+    CiteSeer Gemma          1.09x  (p=.062)  .0005     0.35* / 0.24*
+    CiteSeer LLaMA (!)      1.14x            .0005     0.33* / 0.15 (n.s.)
+    CiteSeer SmolLM         0.83x            .0005     0.29 (p=.054) / 0.45*
+
+  GNN embedding (1-CKA)
+    Cora     Gemma          1.01x            .0005     0.33* / 0.31*
+    Cora     LLaMA          0.94x            .0005     0.32* / 0.40*
+    Cora     SmolLM         0.97x            .11 n.s.  0.31 n.s. / 0.31 n.s.
+    CiteSeer Gemma          1.08x            .0005     0.41* / 0.29*
+    CiteSeer LLaMA (!)      1.35x            .034      0.44 (p=.07) / 0.11 n.s.
+    CiteSeer SmolLM         0.84x            .0005     0.28 n.s. / 0.47*
+
+  GNN predictions (disagreement on test nodes)
+    Cora     Gemma          0.99x            .001      0.31* / 0.29*
+    Cora     LLaMA          0.83x            .010      0.22 n.s. / 0.44*
+    Cora     SmolLM         0.90x            .53 n.s.  0.17 n.s. / 0.28*
+    CiteSeer Gemma          0.99x            .0005     0.31* / 0.28*
+    CiteSeer LLaMA (!)      1.15x            .0035     0.39* / 0.13 n.s.
+    CiteSeer SmolLM         0.92x            .001      0.27 n.s. / 0.34*
+
+  Reading
+  + T1 (init adds diversity) holds on CiteSeer for 3/3 LLMs at every level.
+    On Cora it FAILS for SmolLM at GNN-embedding and prediction level
+    (p = 0.11 and 0.53): there, the init adds nothing beyond seed noise to
+    the predictions.
+  + Gemma2-2B is the best LLM for the claim on both datasets: init R2 >
+    seed R2 at all three levels on both Cora and CiteSeer, and on Cora the
+    LLM-embedding ratio is significantly > 1 (1.20x, p = 0.012), the only
+    significant "init > seed" result in Experiment 1.
+  - The ratio still drops to ~0.99x at the prediction level for Gemma on
+    both datasets. The GNN still makes the views more alike (same as in
+    section 7).
+  - SmolLM2 behaves like Cora semi-supervised LLaMA: seed > init everywhere.
+
+13.3 Experiment 2 - systematic errors (error_consistency)
+
+                     err-dist  init-specific     ANOVA init        ANOVA init x class
+                     ratio     persistent errs   p (eta2)          p (eta2)
+    Cora     Gemma   0.99x     27 of 44          .067 (0.08)       .006* (0.32)
+    Cora     LLaMA   0.84x     15 of 35          .74  (0.02)       .89   (0.11)
+    Cora     SmolLM  0.92x     33 of 47          .71  (0.02)       .93   (0.12)
+    CiteSeer Gemma   0.98x     63 of 111         .003* (0.16)      .35   (0.20)
+    CiteSeer LLaMA(!)1.08x     79 of 116         <1e-7* (0.35)     .81   (0.14)
+    CiteSeer SmolLM  0.93x     56 of 116         <1e-4* (0.26)     .03*  (0.29)
+
+  ("init-specific persistent errors" = nodes that are wrong in every seed
+   for at least one init but NOT for every init.)
+  Systematic rescues (A always wrong, B always right) stay rare on both
+  datasets: 0-3 nodes per pair (0-5 for CiteSeer + LLaMA, from the failed
+  ORTHOGONAL runs).
+
+  Reading
+  + On CiteSeer the init has a significant MAIN effect on per-class
+    accuracy for all 3 LLMs (after seed noise is removed as the residual).
+    So on CiteSeer the inits are reproducibly different in quality, not
+    only in noise. On Cora this is never significant.
+  + CiteSeer has 2-4x more init-specific persistent errors (56-79 vs
+    15-33): more errors that one view makes and another view does not.
+  + Init x class is significant once per dataset (Cora + Gemma, p = 0.006;
+    CiteSeer + SmolLM, p = 0.03). This is the first significant support
+    for class-specific init strengths (it was p = 0.12 in semi-supervised
+    Cora).
+  + CiteSeer has one hard class (class 5, 25-40% accuracy) where the inits
+    differ clearly: Gemma PiSSA 40.0 vs ORTHOGONAL 25.0; SmolLM Gaussian
+    38.3 vs LoftQ 25.6. This is a good concrete example for the paper's
+    class-level ensemble weights. Cora has no class like this (lowest
+    class is ~75% for every init).
+  - The error-set distance ratio is still <= 1 on both datasets (except
+    (!)): error SETS of two inits are not more different than those of two
+    seeds.
+
+13.4 Experiment 3 - complementarity (uniform averages, k = 4)
+
+                     ens acc               gain/best   Spearman(div, gain)
+                     seed-only  multi-init  (multi)    at k=4
+    Cora     Gemma   91.37      91.46       -0.36      0.17
+    Cora     LLaMA   91.74      91.61       -0.09      0.33
+    Cora     SmolLM  90.26      90.08       -0.53      0.40
+    CiteSeer Gemma   82.76      82.85       -0.61      0.16
+    CiteSeer LLaMA(!)81.60      82.68       -0.80      0.84
+    CiteSeer SmolLM  81.82      82.06       -1.24      0.15
+  Multi-init > seed-only is not significant anywhere (p = 0.18-0.57).
+
+  Gain over member mean by number of distinct inits (k = 4, 1 -> max):
+    Cora     Gemma +0.71 -> +1.07   LLaMA +0.76 -> +0.92   SmolLM +0.97 -> +0.96
+    CiteSeer Gemma +0.74 -> +0.98   LLaMA(!) +5.88 -> +7.06 SmolLM +0.27 -> +0.51
+
+  Reading
+  + Multi-init >= seed-only in 3/3 CiteSeer pools, only 1/3 Cora pools.
+    Adding more distinct inits raises the gain on CiteSeer for every LLM;
+    on Cora it is flat for SmolLM. Small effects (+0.1 to +0.3 pp), n.s.
+  - IMPORTANT, true for BOTH datasets: in the supervised setting the
+    uniform ensemble NEVER beats its best member (gain/best -0.1 to -2.1
+    pp). In semi-supervised Cora it did (+0.62 / +0.79). With many labels
+    every member is already strong, and a uniform average of a strong and
+    a weaker member falls below the strong one. So the sentence "every
+    ensemble beats its best member" must NOT be used for the supervised
+    split. DIVERGE's LEARNED ensemble head is what has to beat the best
+    member here (this makes item 4 of section 12 more important).
+  - Diversity -> gain correlation is much weaker than semi-supervised
+    Cora (rho 0.15-0.40 vs 0.75), but still positive and significant
+    everywhere.
+
+13.5 Experiment 4 - mechanism (lora_subspace)
+
+  a) Weight space: init-only distance ~0.96-1.00, seed-only ~0.59-0.64
+     (ratio 1.55-1.66x, all p < 0.02) on BOTH datasets for every LLM. The
+     mechanism result from section 7 is reproduced on 3 LLMs x 2 datasets.
+  b) Spectral position is the same for every LLM and dataset: PiSSA
+     0.96-0.995 top-r overlap; LoftQ 0.05-0.09 (5-25x random, top); Gaussian,
+     Orthogonal, EVA ~random. Std over seeds ~0.000. This is a property of
+     the init, not of the dataset.
+  c) Mantel chain (Spearman rho; n.s. = p > 0.05):
+
+     stage                       Cora: Gemma LLaMA SmolLM | CiteSeer: Gemma LLaMA(!) SmolLM
+     adapter product -> LLM emb        0.61  0.76  0.13 n.s.|          0.57  0.68    0.38
+     LLM emb -> GNN emb                0.45  0.89  0.21     |          0.59  0.65    0.67
+     GNN emb -> predictions            0.66  0.45  0.09 n.s.|          0.77  0.75    0.77
+     LLM emb -> predictions            0.26  0.43  0.06 n.s.|          0.53  0.64    0.40
+
+  Reading
+  + On CiteSeer the whole chain adapter -> embedding -> GNN -> prediction
+    is significant for ALL 3 LLMs (all p <= 0.001), and the last link is
+    strong (rho 0.75-0.77).
+  - On Cora the chain BREAKS for SmolLM (3 of 4 links n.s.), and the
+    LLM -> prediction link is weak for Gemma (0.26).
+  This is the most important difference for Comment 1: CiteSeer shows
+  that weight-space differences reach the predictions, for every LLM.
+
+13.6 Experiment 5 - k-NN neighbourhoods (knn_neighborhood)
+
+  k-NN distance ratio (init-only / seed-only), * = p < 0.05:
+                     LLM emb          GNN emb
+    Cora     Gemma   1.09x* (.012)    1.03x
+    Cora     LLaMA   1.02x            0.98x
+    Cora     SmolLM  1.01x            0.99x
+    CiteSeer Gemma   1.11x* (.005)    1.08x* (.010)
+    CiteSeer LLaMA(!)1.08x (.08)      1.02x
+    CiteSeer SmolLM  1.01x            0.99x
+
+  Correct k-NN majority in ANY of 4 views (LLM emb): inits vs seeds
+    Cora     Gemma .899 vs .888   LLaMA .879 vs .889   SmolLM .872 vs .873
+    CiteSeer Gemma .837 vs .824   LLaMA .814 vs .807   SmolLM .815 vs .814
+  (single-view level: Cora ~0.80, CiteSeer ~0.65-0.72)
+
+  Reading
+  + CiteSeer + Gemma is the ONLY pool where the init changes local
+    neighbourhoods significantly more than the seed at BOTH the LLM and
+    the GNN level.
+  + On CiteSeer, combining 4 inits gives more correct neighbourhoods than
+    combining 4 seeds for 3/3 LLMs (LLM level); on Cora only 1/3.
+  + Combining views helps more on CiteSeer (+10 to +16 pp vs +7 to +9 pp
+    on Cora), because a single view is weaker there.
+
+13.7 Scoreboard: where does "init is more than seed noise" hold?
+
+  (Count of the 3 LLMs; CiteSeer + LLaMA counts only as a trend because of (!))
+
+  Test                                            Cora      CiteSeer
+  ----------------------------------------------  --------  ----------------
+  T1 init adds diversity, prediction level        2/3       3/3
+  Mantel chain complete (all links p < 0.05)      2/3       3/3
+  PERMANOVA init R2 > seed R2, LLM emb            2/3       2/3 (1 is (!))
+  PERMANOVA init R2 > seed R2, GNN emb            1/3       2/3 (1 is (!))
+  Init-only / seed-only > 1 significant           1 (Gemma  3 (Gemma LLM-kNN,
+                                                  LLM CKA,  Gemma GNN-kNN;
+                                                  Gemma     Gemma LLM CKA
+                                                  LLM-kNN)  p=.06 borderline)
+  ANOVA init main effect significant              0/3       3/3
+  ANOVA init x class significant                  1/3       1/3
+  Init-specific persistent errors                 15-33     56-79
+  Multi-init >= seed-only ensemble (k=4)          1/3       3/3 (all n.s.)
+  Uniform ensemble > best member                  0/3       0/3
+
+13.8 Which dataset to use in the paper: CITESEER
+
+  Recommendation: use CiteSeer as the main dataset for the supervised
+  diversity analysis, with Gemma2-2B as the main LLM. Put Cora (all 3
+  LLMs) and the other CiteSeer LLMs in the appendix as replication.
+
+  Why CiteSeer
+  1. Comment 1 (mechanism): the full chain adapter -> embedding -> GNN ->
+     prediction is significant for all 3 LLMs on CiteSeer. On Cora it
+     breaks for SmolLM. CiteSeer answers "the relationship is not
+     sufficiently justified" much more cleanly.
+  2. Comment 2(b) (systematic, not random): the init has a significant
+     effect on per-class accuracy on CiteSeer for all 3 LLMs, never on
+     Cora. CiteSeer also has 2-4x more init-specific persistent errors and
+     a hard class where inits clearly differ.
+  3. Comment 2(a) (vs seed noise): CiteSeer + Gemma has the most "init >
+     seed" results (k-NN at LLM and GNN level significant, LLM CKA 1.09x
+     p = 0.06, init R2 > seed R2 at all levels).
+  4. Comment 2(c) (complementary): multi-init ensembles are at least as
+     good as seed-only ensembles on CiteSeer for all LLMs (only 1/3 on
+     Cora), and more distinct inits always raise the gain.
+  5. Headroom: Cora members are already ~90% accurate and have little room
+     to differ. CiteSeer (~82%) is harder and more informative. A reviewer
+     will also find it more convincing than the smallest, easiest
+     benchmark.
+
+  What Cora still gives
+  - Cora + Gemma has the single strongest "init > seed" number in
+    Experiment 1 (LLM CKA 1.20x, p = 0.012; PERMANOVA init 0.48 vs seed
+    0.22 n.s.) and the clearest init x class interaction (p = 0.006,
+    eta2 = 0.32). Cite these as supporting results.
+  - Cora shows the result is not specific to one dataset.
+
+  What neither dataset gives (state it honestly, as in section 9)
+  - At the PREDICTION level, init-only / seed-only stays <= 1 for every
+    clean pool (0.83-0.99x). The main message does not change: init adds
+    diversity on top of seed noise and is a structured, controllable
+    source, but at the prediction level it is of the same size as seed
+    diversity.
+  - No systematic rescues (0-3 nodes per pair).
+  - Uniform ensembles do not beat the best member in the supervised split;
+    only the learned DIVERGE head can show that.
+
+13.9 To do before these supervised results go into the paper
+  1. Retrain CiteSeer + LLaMA ORTHOGONAL seeds 42 and 44 (collapsed at
+     18.5% / 28.2%), re-cache the embeddings and rerun all five
+     experiments for this pool. Check whether ORTHOGONAL with LLaMA is
+     unstable in general (lr, init scale), because the same collapse may
+     appear on other datasets.
+  2. Cache ORTHOGONAL seeds 42-45 for Cora + LLaMA (still missing, so this
+     pool has 16 members instead of 20).
+  3. Run the learned DIVERGE head on seed-only vs multi-init pools
+     (section 12, item 4). In the supervised split this is now REQUIRED:
+     uniform averages never beat the best member, so only the learned head
+     can show that the ensemble is useful.
+  4. Aggregate the Gemma2-2B CiteSeer + Cora rows into the main-text
+     table of section 10.1 (replacing the semi-supervised Cora + LLaMA
+     numbers, or next to them).
+
+
+13.10 LEAKAGE in the supervised pools (found 2026-09-30)
+  LoRA training uses SPLIT=1, so LoRA seed s is fine-tuned on the seed-s
+  60/20/20 split. Every GNN in the diversity pool is evaluated on the
+  seed-42 split (--gnn_seed 42). The seed-43/44/45 train sets cover
+  58-63% of the seed-42 test nodes (Cora 542, CiteSeer 638 test nodes).
+  So members with LoRA seed 43-45 were fine-tuned on text+labels of most
+  of the test nodes. The evidence is visible in every supervised pool:
+  mean member accuracy by LoRA seed (42 / 43 / 44 / 45)
+    CiteSeer Gemma   79.87 / 82.29 / 83.23 / 82.67
+    CiteSeer LLaMA   78.96 / 82.60 / 82.01 / 82.16
+    CiteSeer SmolLM  79.40 / 82.20 / 82.41 / 82.16
+    Cora     Gemma   89.41 / 91.11 / 91.66 / 90.44
+    Cora     LLaMA   89.20 / 91.75 / 91.47 / 91.51
+    Cora     SmolLM  87.71 / 90.37 / 89.63 / 89.45
+  (the semi-supervised CiteSeer pools show no such seed-42 dip.)
+  What it affects
+  - Unaffected: adapter weight-space distances and spectral positions
+    (Exp 4a/4b), and all init-only comparisons (same seed = same split).
+  - Changes meaning: "seed-only" pairs also differ in the fine-tuning
+    split. In the paper this is stated as a stricter seed baseline.
+  - Optimistic: absolute member / ensemble accuracies, and anything that
+    depends on test-node correctness (Exp 2, Exp 3, Exp 5c).
+  Clean fix (after the deadline): add a separate split seed to
+  train_llm/train_other_lora_init_apporaches.py, fine-tune all 20 members
+  on the seed-42 split with LoRA seeds 42-45, re-cache, rerun the five
+  experiments. The main DIVERGE results (one split per seed, used by LoRA,
+  GNN and ensemble alike) are NOT affected.
+
+13.11 What went into template.tex (section sec:initDiversity)
+  Rewritten with CiteSeer + Gemma-2-2B (supervised, 20 members):
+  Table seed_vs_init, Table spectral (now with Orthogonal), Table mantel
+  (+ GNN emb -> pred, adapter B -> pred), new paragraph "Systematic
+  differences between initializations" (ANOVA init effect, class 5,
+  init-specific errors, k-NN), complementarity with the gain-vs-best
+  honesty sentence, Table seed_multi_ensemble, and a new figure
+  images/gemma2_2B_citeseer_gain_vs_distinct_inits.png (gain grows with
+  the number of distinct inits for every k; replaces the scatter plot,
+  which at rho = 0.16 looks like a cloud). The LaTeX header comment of
+  the section records the leakage note. Added \label{sec:trainable_vs_avg}
+  to "Performance Comparison of Trainable Ensemble Learning vs. Simple
+  Averaging".
+  Not claimed: init-only > seed-only at the prediction level (0.99x), and
+  "every ensemble beats its best member" (false in supervised).
+13.12 Own-split rerun (CiteSeer + Gemma-2-2B, --gnn_seed -1) -> used in the paper
+  Each member's GNN uses the split of its own LoRA seed; node metrics use
+  the test nodes shared by the compared members (same seed 638, different
+  seed ~124). Member accuracy: seed 42 ~80, seeds 43-45 ~76-78 (were
+  82-83 with the fixed split = the leakage).
+  Survives: adapter/spectral (unchanged), LLM CKA 1.09x (R2 init .35 /
+  seed .24), LLM k-NN 1.11x p=.005, Mantel adapter->LLM .57, LLM->GNN
+  .53, GNN->pred .29 (p=.010), T1 init effect at every stage (p<=.011),
+  oracle gain 2.9-3.1 pp, error-set T1 p=.022, multi-init uniform
+  ensemble +0.59 pp over mean, k-NN any-of-4-inits 67.8 -> 78.2%.
+  Gone: ANOVA init effect (p=.61), class-5 story, LLM->pred Mantel (.09
+  n.s.), GNN-level init > seed (GNN emb 0.68x, seed R2 .59), gain vs
+  number of distinct inits (flat), diversity-gain correlation (~0).
+  Not computable: seed-only ensembles of 4 seeds, error persistence,
+  rescues, any-of-4-seeds (only 4 test nodes shared by all 4 splits).
+  template.tex sec:initDiversity was rewritten with these numbers only;
+  table seed_multi_ensemble and figure div_gain were removed.

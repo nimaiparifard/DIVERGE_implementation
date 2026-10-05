@@ -1,0 +1,80 @@
+{
+    "seed": 44,
+    "device": 1,
+    "dataset": "cora",
+    "gnn_model_name": "SAGE",
+    "llm_name": "llama_3.2_1B",
+    "epochs": 200,
+    "early_stop": 20,
+    "re_split": 1,
+    "lr": 0.001,
+    "hidden_dim": 128,
+    "num_layers": 3,
+    "dropout": 0.5,
+    "weight_decay": 0.0,
+    "batch_norm": 1,
+    "tuning": {
+        "init_weight_approach": "eva",
+        "peft_type": "lora",
+        "embedding_cache": "artifacts\\cache\\llama_3.2_1B_cora_seqcls_lora_init-eva_pool-mean_seed44_semi_supervised.pt",
+        "trial_log": "results\\gnn_tuning\\cora_llama_3.2_1B_SAGE_supervised_seed44_init-eva\\trials.jsonl",
+        "search_space": {
+            "learning_rate": [
+                0.01,
+                0.005,
+                0.001,
+                0.0001
+            ],
+            "hidden_dim": [
+                128,
+                256,
+                512,
+                1024
+            ],
+            "num_layers": [
+                2,
+                3
+            ],
+            "dropout": [
+                0.0,
+                0.1,
+                0.01,
+                0.5
+            ],
+            "weight_decay": [
+                0.0,
+                0.01
+            ],
+            "batch_norm": [
+                0,
+                1
+            ]
+        },
+        "val_acc": 91.57666666666667,
+        "val_acc_std": 0.17441967269268388,
+        "test_acc": 88.93,
+        "test_acc_std": 0.0,
+        "val_f1": 89.87,
+        "test_f1": 87.76666666666667,
+        "val_acc_per_seed": [
+            91.33,
+            91.7,
+            91.7
+        ],
+        "test_acc_per_seed": [
+            88.93,
+            88.93,
+            88.93
+        ],
+        "eval_seeds": [
+            44,
+            1044,
+            2044
+        ],
+        "n_candidates": 512,
+        "n_promoted": 16,
+        "search": "random",
+        "total_time_sec": 775.6,
+        "timestamp": "2026-09-30 02:59:20"
+    }
+}

@@ -1,0 +1,9 @@
+{
+    "type": "lora",
+    "rank": 8,
+    "lora_alpha": 16,
+    "lora_dropout": 0.05,
+    "module_to_save": ["score"],
+    "init_lora_weights": "pissa",
+    "use_rslora": true
+}

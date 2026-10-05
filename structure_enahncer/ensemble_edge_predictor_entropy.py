@@ -1,0 +1,609 @@
+# Tune hyperparameter topk and threshold and run node classification
+# Give me 5 best models and best dataset
+# Run tune_ensemble_hyperparameter for 5 best models in best accuracy and best modified dataset
+# Write down result with ReportResults
+
+import os
+import sys
+import argparse
+import torch
+import numpy as np
+import gc
+from copy import deepcopy
+
+# Ensure repo root is on path
+_repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
+if _repo_root not in sys.path:
+    sys.path.insert(0, _repo_root)
+
+from LLMReasoner.TAPE.peft_tape_finetuning.config import setup_finetuning_cfg
+from LLMReasoner.TAPE.peft_tape_finetuning.dataset_loader import load_dataset
+from LLMReasoner.TAPE.peft_tape_finetuning.data_utils import get_init_dataset_for_gnn, get_embedding_from_data
+from LLMReasoner.TAPE.peft_tape_finetuning.gnn_mtrainer import set_mgnn_cfg, gnn_train_and_report_with_modified_dataset
+from LLMReasoner.TAPE.peft_tape_finetuning.ensemble_gnns_learning import tune_ensemble_hyperparameter, ensemble_gnn_learning
+from LLMReasoner.TAPE.peft_tape_finetuning.reporter import ReportResults
+from LLMReasoner.TAPE.structure_hybrid_enahncer.uncertainty_edge_detection import NoisyEdgeDetector, create_modified_dataset
+from common.gnn import GNNEncoder
+
+
+def cleanup_gpu_memory(config_entry):
+    """
+    Clean up GPU memory by moving model and dataset to CPU and deleting references.
+    
+    Args:
+        config_entry: Configuration entry with 'model' and 'modified_dataset' keys
+    """
+    if config_entry is None:
+        return
+    
+    # Move model to CPU and delete
+    if 'model' in config_entry and config_entry['model'] is not None:
+        try:
+            model = config_entry['model']
+            # Move model to CPU if it's on GPU
+            if hasattr(model, 'to'):
+                model.to('cpu')
+            elif hasattr(model, 'cpu'):
+                model.cpu()
+            # Delete model
+            del config_entry['model']
+            del model
+        except Exception as e:
+            print(f"  [Warning] Error cleaning up model: {e}")
+            pass
+    
+    # Move dataset to CPU and delete
+    if 'modified_dataset' in config_entry and config_entry['modified_dataset'] is not None:
+        try:
+            dataset = config_entry['modified_dataset']
+            # Move dataset tensors to CPU if they're on GPU
+            if hasattr(dataset, 'to'):
+                dataset.to('cpu')
+            elif hasattr(dataset, 'cpu'):
+                dataset.cpu()
+            # Delete dataset
+            del config_entry['modified_dataset']
+            del dataset
+        except Exception as e:
+            print(f"  [Warning] Error cleaning up dataset: {e}")
+            pass
+    
+    # Clear embedding if present
+    if 'embedding' in config_entry and config_entry['embedding'] is not None:
+        try:
+            if isinstance(config_entry['embedding'], torch.Tensor):
+                if config_entry['embedding'].is_cuda:
+                    config_entry['embedding'] = config_entry['embedding'].cpu()
+            del config_entry['embedding']
+        except:
+            pass
+    
+    # Force garbage collection
+    gc.collect()
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+        torch.cuda.synchronize()
+
+
+def add_to_topk_list(topk_list, new_config, k=5, metric='val_acc'):
+    """
+    Add new configuration to top-k list, maintaining only k best configurations.
+    If new config is better than worst in list, replace worst and clean up GPU memory.
+    Optimized to minimize GPU memory usage by immediately discarding non-top-k configs.
+    
+    Args:
+        topk_list: Current list of top k configurations (sorted descending by metric)
+        new_config: New configuration to potentially add
+        k: Number of top configurations to keep
+        metric: Metric name for comparison
+    
+    Returns:
+        topk_list: Updated list with at most k configurations
+    """
+    new_metric = new_config['metric_value']
+    
+    # If list is not full, just add it
+    if len(topk_list) < k:
+        topk_list.append(new_config)
+        topk_list.sort(key=lambda x: x['metric_value'], reverse=True)
+        print(f"  [Memory] Added config to top-k list (metric={new_metric:.4f}, list size={len(topk_list)})")
+        return topk_list
+    
+    # List is full - check if new config is better than worst in current list
+    worst_metric = topk_list[-1]['metric_value']
+    
+    if new_metric > worst_metric:
+        # Remove worst configuration and clean up GPU memory
+        worst_config = topk_list.pop()
+        cleanup_gpu_memory(worst_config)
+        
+        # Add new configuration
+        topk_list.append(new_config)
+        topk_list.sort(key=lambda x: x['metric_value'], reverse=True)
+        
+        print(f"  [Memory] Replaced worst config (metric={worst_metric:.4f}) with new (metric={new_metric:.4f})")
+    else:
+        # New config is not better, discard it immediately to save GPU memory
+        cleanup_gpu_memory(new_config)
+        print(f"  [Memory] Discarded config (metric={new_metric:.4f} <= worst={worst_metric:.4f})")
+    
+    return topk_list
+
+
+def tune_hyperparameters_entropy(
+    gnn_cfg,
+    embedding,
+    dataset_name,
+    topk_percentages,
+    threshold_values,
+    num_models=10,
+    decoder_type='mlp',
+    metric='val_acc',
+    k_best=5
+):
+    """
+    Tune hyperparameters (topk and threshold) for entropy uncertainty-based edge removal.
+    Returns top k best configurations based on test accuracy.
+    Optimized to keep only k best models/datasets in GPU memory at any time.
+    
+    Args:
+        gnn_cfg: GNN configuration
+        embedding: Node embeddings
+        dataset_name: Dataset name
+        topk_percentages: List of top-k percentages to try
+        threshold_values: List of threshold values to try
+        num_models: Number of edge predictor models
+        decoder_type: Edge predictor decoder type
+        metric: Metric to optimize (default: 'val_acc'; never a test metric)
+        k_best: Number of best configurations to keep (default: 5)
+    
+    Returns:
+        topk_configs: List of top k configurations, each with:
+            - config_dict: hyperparameters
+            - modified_dataset: modified dataset
+            - results: GNN training results
+            - model: trained GNN model
+    """
+    print(f"\n{'='*80}")
+    print(f"TUNING HYPERPARAMETERS (ENTROPY UNCERTAINTY)")
+    print(f"{'='*80}")
+    print(f"Top-k percentages: {topk_percentages}")
+    print(f"Threshold values: {threshold_values}")
+    print(f"Metric to optimize: {metric}")
+    print(f"Keeping top {k_best} configurations in memory")
+    print(f"{'='*80}\n")
+    
+    # Create detector and train edge predictors
+    detector = NoisyEdgeDetector(
+        cfg=gnn_cfg,
+        features=embedding,
+        num_models=num_models,
+        decoder_type=decoder_type,
+        training_strategy='with_splitting',
+        negative_sampling_ratio=1.0,
+    )
+    detector.train_edge_predictors()
+    
+    # Compute entropy uncertainty scores
+    entropy_scores = detector.calculate_entropy()
+    
+    # Train baseline for comparison
+    print(f"\n{'='*80}")
+    print(f"BASELINE: Training on Original Graph")
+    print(f"{'='*80}")
+    baseline_result, _ = gnn_train_and_report_with_modified_dataset(
+        modified_dataset=detector.dataset,
+        embedding=embedding,
+        dataset_name=dataset_name
+    )
+    baseline_metric = baseline_result[metric]
+    print(f"Baseline {metric}: {baseline_metric:.4f}\n")
+    
+    # Maintain only top k configurations in memory
+    topk_configs = []
+    total_configs_tested = 0
+    
+    # Test top-k strategy
+    for topk_pct in topk_percentages:
+        print(f"\n{'='*80}")
+        print(f"Testing Top-k = {topk_pct}%")
+        print(f"{'='*80}")
+        
+        modified_dataset, removal_stats = create_modified_dataset(
+            dataset=detector.dataset,
+            uncertainty_scores=entropy_scores,
+            threshold=topk_pct,
+            removal_strategy='top_k'
+        )
+        
+        modified_result, modified_model = gnn_train_and_report_with_modified_dataset(
+            modified_dataset=modified_dataset,
+            embedding=embedding,
+            dataset_name=dataset_name
+        )
+        
+        config_entry = {
+            'config_dict': {
+                'removal_strategy': 'top_k',
+                'threshold': topk_pct,
+                'removal_percentage': removal_stats['removal_percentage'],
+            },
+            'modified_dataset': modified_dataset,
+            'results': modified_result,
+            'model': modified_model,
+            'metric_value': modified_result[metric],
+            'improvement': modified_result[metric] - baseline_metric,
+        }
+        
+        # Add to top-k list (will discard if not good enough)
+        topk_configs = add_to_topk_list(topk_configs, config_entry, k=k_best, metric=metric)
+        total_configs_tested += 1
+        
+        print(f"Top-k {topk_pct}%: {metric} = {modified_result[metric]:.4f}, "
+              f"Improvement = {config_entry['improvement']:+.4f}, "
+              f"Top-k list size: {len(topk_configs)}/{k_best}")
+        
+        # Periodic memory cleanup every 10 configs
+        if total_configs_tested % 10 == 0:
+            gc.collect()
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+                print(f"  [Memory] Periodic cleanup after {total_configs_tested} configs tested")
+    
+    # Test threshold strategy
+    for threshold in threshold_values:
+        print(f"\n{'='*80}")
+        print(f"Testing Threshold = {threshold:.4f}")
+        print(f"{'='*80}")
+        
+        modified_dataset, removal_stats = create_modified_dataset(
+            dataset=detector.dataset,
+            uncertainty_scores=entropy_scores,
+            threshold=threshold,
+            removal_strategy='threshold'
+        )
+        
+        modified_result, modified_model = gnn_train_and_report_with_modified_dataset(
+            modified_dataset=modified_dataset,
+            embedding=embedding,
+            dataset_name=dataset_name
+        )
+        
+        config_entry = {
+            'config_dict': {
+                'removal_strategy': 'threshold',
+                'threshold': threshold,
+                'removal_percentage': removal_stats['removal_percentage'],
+            },
+            'modified_dataset': modified_dataset,
+            'results': modified_result,
+            'model': modified_model,
+            'metric_value': modified_result[metric],
+            'improvement': modified_result[metric] - baseline_metric,
+        }
+        
+        # Add to top-k list (will discard if not good enough)
+        topk_configs = add_to_topk_list(topk_configs, config_entry, k=k_best, metric=metric)
+        total_configs_tested += 1
+        
+        print(f"Threshold {threshold:.4f}: {metric} = {modified_result[metric]:.4f}, "
+              f"Removed {removal_stats['removal_percentage']:.2f}%, "
+              f"Improvement = {config_entry['improvement']:+.4f}, "
+              f"Top-k list size: {len(topk_configs)}/{k_best}")
+        
+        # Periodic memory cleanup every 10 configs
+        if total_configs_tested % 10 == 0:
+            gc.collect()
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+                print(f"  [Memory] Periodic cleanup after {total_configs_tested} configs tested")
+    
+    # Final sort (should already be sorted, but ensure it)
+    topk_configs.sort(key=lambda x: x['metric_value'], reverse=True)
+    
+    # Final memory cleanup
+    gc.collect()
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+        print(f"  [Memory] Final cleanup - GPU memory freed")
+    
+    print(f"\n{'='*80}")
+    print(f"TOP {len(topk_configs)} CONFIGURATIONS (from {total_configs_tested} tested)")
+    print(f"{'='*80}")
+    for i, config in enumerate(topk_configs, 1):
+        print(f"{i}. Strategy: {config['config_dict']['removal_strategy']}, "
+              f"Threshold: {config['config_dict']['threshold']:.4f}, "
+              f"{metric} = {config['metric_value']:.4f}, "
+              f"Improvement = {config['improvement']:+.4f}")
+    
+    return topk_configs, baseline_result
+
+
+def extract_gnn_encoder(model):
+    """
+    Extract GNN encoder from a trained GNN model.
+    
+    Args:
+        model: Trained GNN model (from gnn_train_and_report_with_modified_dataset)
+               This is already a GNNEncoder instance
+    
+    Returns:
+        encoder: GNNEncoder instance
+    """
+    # The model from gnn_train_and_report_with_modified_dataset is already a GNNEncoder
+    # Just return it directly
+    return model
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description='Ensemble edge predictor with entropy uncertainty: tune hyperparameters, find top 5, run ensemble'
+    )
+    parser.add_argument('--dataset_name', type=str, default='cora', help='Dataset name')
+    parser.add_argument('--llm_name', type=str, default='llama_3.2_1B', help='LLM name')
+    parser.add_argument('--peft_type', type=str, default='lora', help='PEFT type')
+    parser.add_argument('--init_weight_approach', type=str, default='orthogonal',
+                        choices=['pissa', 'orthogonal', 'guassian', 'loftq', 'eva'],
+                        help='Initialization weight approach')
+    parser.add_argument('--num_models', type=int, default=20,
+                        help='Number of edge predictor models (K)')
+    parser.add_argument('--decoder_type', type=str, default='mlp',
+                        choices=['dot_product', 'mlp', 'bilinear'],
+                        help='Edge predictor decoder type')
+    parser.add_argument('--topk_percentages', type=float, nargs='+', 
+                        default=[5.0, 10.0, 15.0, 20.0, 25.0, 30.0],
+                        help='Top-k percentages to test')
+    parser.add_argument('--threshold_values', type=float, nargs='+',
+                        default=[0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.7],
+                        help='Threshold values to test (default: entropy thresholds)')
+    parser.add_argument('--metric', type=str, default='val_acc',  # configs are selected on validation only
+                        choices=['val_acc', 'val_f1'],
+                        help='Validation metric used to select configurations (default: val_acc)')
+    parser.add_argument('--k_best', type=int, default=5,
+                        help='Number of best configurations to keep in memory (default: 5)')
+    parser.add_argument('--save_dir', type=str, default='results/ensemble_edge_predictor_entropy',
+                        help='Directory to save results')
+    
+    args = parser.parse_args()
+    # list from 0.0 to 50 with 1 step
+    topk_percentage = np.arange(0.0, 60.0, 1.0).tolist()
+    # threshold list from 0.0 to 0.4 with 0.01 step
+    threshold_values = np.arange(0.0, 0.7, 0.01).tolist()
+    os.makedirs(args.save_dir, exist_ok=True)
+
+    os.makedirs(args.save_dir, exist_ok=True)
+    
+    print('=' * 80)
+    print('ENSEMBLE EDGE PREDICTOR WITH ENTROPY UNCERTAINTY')
+    print('=' * 80)
+    print(f"Dataset: {args.dataset_name}, LLM: {args.llm_name}, Init: {args.init_weight_approach}")
+    print(f"K models: {args.num_models}, Decoder: {args.decoder_type}")
+    print(f"Top-k percentages: {args.topk_percentages}")
+    print(f"Threshold values: {args.threshold_values}")
+    print(f"Metric to optimize: {args.metric}")
+    print('=' * 80)
+    
+    # Setup config and load data
+    cfg = setup_finetuning_cfg(args.dataset_name, args.llm_name, args.peft_type)
+    gnn_cfg = set_mgnn_cfg(args.dataset_name)
+    dataset = load_dataset(cfg)
+    data_pissa, data_orthogonal, data_guassian, data_loftq, data_eva = get_init_dataset_for_gnn(cfg)
+    
+    init_to_data = {
+        'pissa': data_pissa,
+        'orthogonal': data_orthogonal,
+        'guassian': data_guassian,
+        'loftq': data_loftq,
+        'eva': data_eva,
+    }
+    embedding = get_embedding_from_data(init_to_data[args.init_weight_approach])
+    dataset.x = embedding
+    
+    # Step 1: Tune hyperparameters and get top k configurations
+    print(f"\n{'='*80}")
+    print("STEP 1: Tuning Hyperparameters (Top-k and Threshold)")
+    print(f"{'='*80}")
+    topk_configs, baseline_result = tune_hyperparameters_entropy(
+        gnn_cfg=gnn_cfg,
+        embedding=embedding,
+        dataset_name=args.dataset_name,
+        topk_percentages=topk_percentage,
+        threshold_values=threshold_values,
+        num_models=args.num_models,
+        decoder_type=args.decoder_type,
+        metric=args.metric,
+        k_best=args.k_best
+    )
+    
+    # Step 2: Extract models and modified datasets from top k configurations
+    print(f"\n{'='*80}")
+    print(f"STEP 2: Extracting Top {len(topk_configs)} Models and Modified Datasets")
+    print(f"{'='*80}")
+    
+    model_list = []
+    modified_datasets_list = []
+    custom_embeddings_list = []
+    
+    for i, config in enumerate(topk_configs, 1):
+        # Extract GNN encoder from trained model
+        encoder = extract_gnn_encoder(config['model'])
+        model_list.append(encoder)
+        modified_datasets_list.append(config['modified_dataset'])
+        custom_embeddings_list.append(embedding.clone())  # Same embedding for all
+        
+        print(f"Model {i}: Strategy={config['config_dict']['removal_strategy']}, "
+              f"Threshold={config['config_dict']['threshold']:.4f}, "
+              f"{args.metric}={config['metric_value']:.4f}")
+    
+    # Step 3: Run ensemble hyperparameter tuning for all three approaches
+    print(f"\n{'='*80}")
+    print("STEP 3: Running Ensemble Hyperparameter Tuning")
+    print(f"{'='*80}")
+    
+    ensemble_approaches_list = ['learnable', 'learnable_classes', 'learnable_per_classes']
+    all_ensemble_results = {}
+    
+    for ensemble_approach in ensemble_approaches_list:
+        print(f"\n{'='*80}")
+        print(f"Running Ensemble Approach: {ensemble_approach.upper()}")
+        print(f"{'='*80}")
+        
+        best_results, best_hyperparams, best_ensemble_predictions = tune_ensemble_hyperparameter(
+            dataset_name=args.dataset_name,
+            model_list=model_list,
+            custom_embeddings=custom_embeddings_list,
+            modified_datasets_list=modified_datasets_list,
+            ensemble_approaches=ensemble_approach,
+            supervised=True
+        )
+        
+        all_ensemble_results[ensemble_approach] = {
+            'best_results': best_results,
+            'best_hyperparams': best_hyperparams,
+            'best_ensemble_predictions': best_ensemble_predictions
+        }
+        
+        print(f"\n{ensemble_approach.upper()} RESULTS:")
+        print(f"{'='*80}")
+        if best_results:
+            print(f"Best test accuracy: {best_results.get('test', {}).get('accuracy', 'N/A'):.4f}")
+            print(f"Best test F1 (Macro): {best_results.get('test', {}).get('macro_f1', 'N/A'):.4f}")
+            print(f"Best test F1 (Weighted): {best_results.get('test', {}).get('weighted_f1', 'N/A'):.4f}")
+            print(f"Best val accuracy: {best_results.get('val', {}).get('accuracy', 'N/A'):.4f}")
+        if best_hyperparams:
+            print(f"\nBest Hyperparameters:")
+            print(f"  Layers: {best_hyperparams.get('num_layers', 'N/A')}")
+            print(f"  Hidden Dim: {best_hyperparams.get('hidden_dim', 'N/A')}")
+            print(f"  Dropout: {best_hyperparams.get('dropout', 'N/A')}")
+            print(f"  Learning Rate: {best_hyperparams.get('learning_rate', 'N/A')}")
+    
+    print(f"\n{'='*80}")
+    print("SUMMARY: ALL ENSEMBLE APPROACHES")
+    print(f"{'='*80}")
+    for approach in ensemble_approaches_list:
+        results = all_ensemble_results[approach]['best_results']
+        if results:
+            test_acc = results.get('test', {}).get('accuracy', 'N/A')
+            test_f1 = results.get('test', {}).get('macro_f1', 'N/A')
+            val_acc = results.get('val', {}).get('accuracy', 'N/A')
+            print(f"{approach.upper()}: Test Acc={test_acc:.4f}, Test F1={test_f1:.4f}, Val Acc={val_acc:.4f}")
+    
+    # Step 4: Report results using ReportResults
+    print(f"\n{'='*80}")
+    print("STEP 4: Writing Results Report")
+    print(f"{'='*80}")
+    
+    reporter = ReportResults(cfg, save_dir=args.save_dir, index_run=0, init_approach=args.init_weight_approach)
+    
+    reporter.report_title("ENSEMBLE EDGE PREDICTOR WITH ENTROPY UNCERTAINTY")
+    reporter.report_txt(f"Dataset: {args.dataset_name}")
+    reporter.report_txt(f"LLM: {args.llm_name}")
+    reporter.report_txt(f"Init Weight Approach: {args.init_weight_approach}")
+    reporter.report_txt(f"Number of Edge Predictor Models (K): {args.num_models}")
+    reporter.report_txt(f"Decoder Type: {args.decoder_type}")
+    reporter.report_txt(f"Metric Optimized: {args.metric}")
+    reporter.report_txt("")
+    
+    reporter.report_title("BASELINE RESULTS")
+    reporter.report_txt(f"Test Accuracy: {baseline_result['test_acc']:.4f}")
+    reporter.report_txt(f"Test F1 (Macro): {baseline_result['test_f1']:.4f}")
+    reporter.report_txt(f"Test F1 (Weighted): {baseline_result['test_weight_f1']:.4f}")
+    reporter.report_txt(f"Val Accuracy: {baseline_result['val_acc']:.4f}")
+    reporter.report_txt(f"Val F1 (Macro): {baseline_result['val_f1']:.4f}")
+    reporter.report_txt("")
+    
+    reporter.report_title(f"TOP {len(topk_configs)} CONFIGURATIONS")
+    for i, config in enumerate(topk_configs, 1):
+        reporter.report_txt(f"\nConfiguration {i}:")
+        reporter.report_txt(f"  Strategy: {config['config_dict']['removal_strategy']}")
+        reporter.report_txt(f"  Threshold: {config['config_dict']['threshold']:.4f}")
+        reporter.report_txt(f"  Removal Percentage: {config['config_dict']['removal_percentage']:.2f}%")
+        reporter.report_txt(f"  Test Accuracy: {config['results']['test_acc']:.4f}")
+        reporter.report_txt(f"  Test F1 (Macro): {config['results']['test_f1']:.4f}")
+        reporter.report_txt(f"  Test F1 (Weighted): {config['results']['test_weight_f1']:.4f}")
+        reporter.report_txt(f"  Val Accuracy: {config['results']['val_acc']:.4f}")
+        reporter.report_txt(f"  Val F1 (Macro): {config['results']['val_f1']:.4f}")
+        reporter.report_txt(f"  Improvement ({args.metric}): {config['improvement']:+.4f}")
+    
+    reporter.report_title("ENSEMBLE LEARNING RESULTS")
+    
+    # Report results for each ensemble approach
+    for ensemble_approach in ensemble_approaches_list:
+        reporter.report_title(f"ENSEMBLE APPROACH: {ensemble_approach.upper()}")
+        
+        approach_data = all_ensemble_results[ensemble_approach]
+        best_results = approach_data['best_results']
+        best_hyperparams = approach_data['best_hyperparams']
+        
+        if best_results:
+            reporter.report_txt(f"\nTest Results:")
+            reporter.report_txt(f"  Test Accuracy: {best_results.get('test', {}).get('accuracy', 'N/A'):.4f}")
+            reporter.report_txt(f"  Test F1 (Macro): {best_results.get('test', {}).get('macro_f1', 'N/A'):.4f}")
+            reporter.report_txt(f"  Test F1 (Weighted): {best_results.get('test', {}).get('weighted_f1', 'N/A'):.4f}")
+            
+            reporter.report_txt(f"\nValidation Results:")
+            reporter.report_txt(f"  Val Accuracy: {best_results.get('val', {}).get('accuracy', 'N/A'):.4f}")
+            reporter.report_txt(f"  Val F1 (Macro): {best_results.get('val', {}).get('macro_f1', 'N/A'):.4f}")
+            
+            reporter.report_txt(f"\nTraining Results:")
+            reporter.report_txt(f"  Train Accuracy: {best_results.get('train', {}).get('accuracy', 'N/A'):.4f}")
+            reporter.report_txt(f"  Train F1 (Macro): {best_results.get('train', {}).get('macro_f1', 'N/A'):.4f}")
+        else:
+            reporter.report_txt("  No results available")
+        
+        if best_hyperparams:
+            reporter.report_txt(f"\nBest Hyperparameters:")
+            reporter.report_txt(f"  Number of Layers: {best_hyperparams.get('num_layers', 'N/A')}")
+            reporter.report_txt(f"  Hidden Dimension: {best_hyperparams.get('hidden_dim', 'N/A')}")
+            reporter.report_txt(f"  Dropout: {best_hyperparams.get('dropout', 'N/A')}")
+            reporter.report_txt(f"  Learning Rate: {best_hyperparams.get('learning_rate', 'N/A')}")
+        
+        reporter.report_txt("")  # Empty line between approaches
+    
+    # Summary comparison
+    reporter.report_title("ENSEMBLE APPROACHES COMPARISON")
+    reporter.report_txt("\nSummary Table:")
+    reporter.report_txt(f"{'Approach':<25} {'Test Acc':<12} {'Test F1':<12} {'Val Acc':<12} {'Val F1':<12}")
+    reporter.report_txt("-" * 75)
+    
+    for ensemble_approach in ensemble_approaches_list:
+        approach_data = all_ensemble_results[ensemble_approach]
+        best_results = approach_data['best_results']
+        
+        if best_results:
+            test_acc = best_results.get('test', {}).get('accuracy', 'N/A')
+            test_f1 = best_results.get('test', {}).get('macro_f1', 'N/A')
+            val_acc = best_results.get('val', {}).get('accuracy', 'N/A')
+            val_f1 = best_results.get('val', {}).get('macro_f1', 'N/A')
+            
+            if isinstance(test_acc, (int, float)):
+                test_acc_str = f"{test_acc:.4f}"
+            else:
+                test_acc_str = str(test_acc)
+            
+            if isinstance(test_f1, (int, float)):
+                test_f1_str = f"{test_f1:.4f}"
+            else:
+                test_f1_str = str(test_f1)
+            
+            if isinstance(val_acc, (int, float)):
+                val_acc_str = f"{val_acc:.4f}"
+            else:
+                val_acc_str = str(val_acc)
+            
+            if isinstance(val_f1, (int, float)):
+                val_f1_str = f"{val_f1:.4f}"
+            else:
+                val_f1_str = str(val_f1)
+            
+            reporter.report_txt(f"{ensemble_approach:<25} {test_acc_str:<12} {test_f1_str:<12} {val_acc_str:<12} {val_f1_str:<12}")
+        else:
+            reporter.report_txt(f"{ensemble_approach:<25} {'N/A':<12} {'N/A':<12} {'N/A':<12} {'N/A':<12}")
+    
+    print(f"\n{'='*80}")
+    print(f"Results saved to: {reporter.file_path}")
+    print('=' * 80)
+
+
+if __name__ == '__main__':
+    main()

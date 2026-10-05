@@ -1,0 +1,15 @@
+{
+    "dataset": "citeseer",
+    "llm_name": "llama_3.2_1B",
+    "peft_type": "lora",
+    "supervised": true,
+    "use_all_nodes": true,
+    "retrained_with_gnn_mistakes": true,
+    "similarity_thresholds": {
+        "PISSA": 0.1,
+        "ORTHOGONAL": 0.7600000000000001,
+        "LOFTQ": 0.7400000000000001,
+        "EVA": 0.7200000000000001,
+        "GAUSSIAN": 0.8400000000000001
+    }
+}

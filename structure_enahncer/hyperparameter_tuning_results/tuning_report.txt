@@ -1,0 +1,68 @@
+================================================================================
+HYPERPARAMETER TUNING REPORT
+Ensemble Edge Editing with Uncertainty-Based Detection
+================================================================================
+
+Date: 2026-01-06 14:02:59
+Dataset: cora
+Total Configurations Tested: 15
+
+================================================================================
+BEST CONFIGURATION
+================================================================================
+Removal Strategy: high_uncertainty
+Top-k Ratio: 0.25
+Train Number: 5
+Best Score (Avg Test Acc Change): 0.2940
+
+================================================================================
+SUMMARY STATISTICS
+================================================================================
+
+Individual GNN Results:
+--------------------------------------------------------------------------------
+Mean Test Acc Change: -0.2345
+Std Test Acc Change: 0.2998
+Max Test Acc Change: 0.2940
+Min Test Acc Change: -0.7340
+
+================================================================================
+RESULTS BY REMOVAL STRATEGY
+================================================================================
+
+HIGH_UNCERTAINTY:
+  Mean Test Acc Change: -0.2500
+  Best Top-k Ratio: 0.25
+  Best Score: 0.2940
+
+LOW_CONFIDENCE:
+  Mean Test Acc Change: -0.3224
+  Best Top-k Ratio: 0.15
+  Best Score: 0.0740
+
+ENTROPY:
+  Mean Test Acc Change: -0.1312
+  Best Top-k Ratio: 0.05
+  Best Score: 0.0760
+
+================================================================================
+DETAILED RESULTS TABLE
+================================================================================
+
+    removal_strategy  top_k_ratio  train_number      ensemble_approach  ind_avg_test_acc_change  ind_avg_test_f1_change ens_test_acc_change ens_test_f1_change  original_edges  removed_edges  remaining_edges
+0   high_uncertainty         0.05             5  learnable_per_classes                   -0.480                  -0.344                None               None           10556            527            10078
+1   high_uncertainty         0.10             5  learnable_per_classes                   -0.662                  -0.716                None               None           10556           1055             9598
+2   high_uncertainty         0.15             5  learnable_per_classes                    0.002                  -0.024                None               None           10556           1583             9094
+3   high_uncertainty         0.20             5  learnable_per_classes                   -0.404                  -0.428                None               None           10556           2111             8588
+4   high_uncertainty         0.25             5  learnable_per_classes                    0.294                   0.446                None               None           10556           2639             8062
+5     low_confidence         0.05             5  learnable_per_classes                   -0.368                  -0.560                None               None           10556            527            10062
+6     low_confidence         0.10             5  learnable_per_classes                   -0.734                  -0.666                None               None           10556           1055             9544
+7     low_confidence         0.15             5  learnable_per_classes                    0.074                   0.388                None               None           10556           1583             9048
+8     low_confidence         0.20             5  learnable_per_classes                   -0.070                   0.172                None               None           10556           2111             8566
+9     low_confidence         0.25             5  learnable_per_classes                   -0.514                  -0.406                None               None           10556           2639             8048
+10           entropy         0.05             5  learnable_per_classes                    0.076                   0.194                None               None           10556            527            10068
+11           entropy         0.10             5  learnable_per_classes                   -0.404                  -0.288                None               None           10556           1055             9540
+12           entropy         0.15             5  learnable_per_classes                   -0.184                   0.006                None               None           10556           1583             9046
+13           entropy         0.20             5  learnable_per_classes                   -0.110                   0.176                None               None           10556           2111             8536
+14           entropy         0.25             5  learnable_per_classes                   -0.034                   0.232                None               None           10556           2639             8024
+

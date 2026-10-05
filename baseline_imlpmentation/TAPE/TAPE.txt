@@ -1,0 +1,16 @@
+TAPE:
+# frist without any adapter just use base model extract text embeddng for dataset
+# then for augmenteed text for each node that exist C:\Users\Nima\Desktop\Python Project\DIVERGE\artifacts\gpt_4o here again with base model extract augmnet text embedding
+# then with them train 2 gnn first with embedding with real text  and then embedding with augmented text embedding then use average meaning for combinging logits
+# do it for diffrent seed 42,43,44,45
+# for seeds embedding does not need seed because we donnt finetuning seed just for gnns
+# also write .Bat for running TAPE
+
+STAGE: 
+# use the base embedding model we extract from TAPE for real text
+# train SAGE,REVGAT,GCN,GIN with base model 
+# then avergae mean pooling for them 
+# run it for seed 42,43,44,45
+# ALSO WARITE .bat for running STAGE
+
+both of them write result in prpoer way in csv file. 

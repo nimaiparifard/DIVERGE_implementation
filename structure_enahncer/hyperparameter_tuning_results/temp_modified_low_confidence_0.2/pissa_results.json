@@ -1,0 +1,8 @@
+{
+    "test_acc": 89.67,
+    "test_f1": 87.72,
+    "val_acc": 88.56,
+    "val_f1": 86.85,
+    "val_weight_f1": 88.43,
+    "test_weight_f1": 89.45
+}

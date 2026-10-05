@@ -1,0 +1,16 @@
+{
+	"seed": 42,
+	"device": 1,
+	"dataset": "pubmed",
+	"gnn_model_name": "SAGE",
+	"llm_name": "llama_3.2_1B",
+	"hidden_dim": 256,
+	"num_layers": 4,
+	"dropout": 0.00,
+	"lr": 0.001,
+	"epochs": 200,
+	"early_stop": 20,
+	"batch_norm": 0,
+	"weight_decay": 0.0,
+	"re_split": 1
+}

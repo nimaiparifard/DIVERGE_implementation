@@ -1,0 +1,23 @@
+{
+    "llm": {
+        "model_name": "deberta_v3_large",
+        "hf_repo_id": "microsoft/deberta-v3-large",
+        "local_files_only": true,
+        "trust_remote_code": true,
+        "architecture": "encoder",
+        "use_4bit": false,
+        "torch_dtype": "float32",
+        "ft_target_modules": ["query_proj", "key_proj", "value_proj", "dense"],
+        "module_to_save": ["classifier"],
+        "caching_batch_size": 16
+    },
+    "tokenizer": {
+        "model_name": "deberta_v3_large",
+        "local_files_only": true,
+        "trust_remote_code": true,
+        "max_length": 512,
+        "padding_side": "right",
+        "padding": true,
+        "truncation": true
+    }
+}
